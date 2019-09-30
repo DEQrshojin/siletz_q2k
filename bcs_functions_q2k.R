@@ -194,19 +194,17 @@ lswcd_q2k <- function(cOut = NULL) {
   
   lswc$DATE.TIME <- as.POSIXct(lswc$DATE.TIME, '%m/%d/%Y %H:%M',
                                tz = 'America/Los_Angeles')
-  
-  # PROCESS HEADWATER CONDITIONS ----
-  # Moonshine regressions -- Use this for before 7/17/2017
+
+  # PROCESS HEADWATER CONDITIONS
+  # Moonshine regressions -- Use this for before 7/17/2017 and for Spawning
   rMoo <- sta2sta_reg(df = lswc, st1 = 37396, st2 = 38912)
   
   # Logsden regressions -- Use this for after 7/17/2017
   rLog <- sta2sta_reg(df = lswc, st1 = 11246, st2 = 38912)
-  
-  stn <- c(11246, 37396, 38912) # 
-  
+
   # Isolate the data for filling:
-  data = lswc[lswc$STAID %in% stn, c(1, 3, 5, 7)]
-  
+  data = lswc[lswc$STAID %in% c(11246, 37396, 38912), c(1, 3, 5, 7)]
+
   pars <- names(data)[3 : 4]
   
   coDt <- as.POSIXct('2017-07-17 14:00', '%Y-%m-%d %H:%M', tz = 'America/Los_Angeles')
@@ -236,8 +234,7 @@ lswcd_q2k <- function(cOut = NULL) {
     
   }
   
-  # Use an aggregate of station data for Rock Creek from both stations and populate
-  # headwater and boundary conditions with these; headwaters first!
+  # Populate headwater and boundary conditions with above TS; headwaters first!
   # The Headwater conditions will also be the inflow conditions for basins 3 & 6
   for (i in 1 : 3) {
     
@@ -247,23 +244,17 @@ lswcd_q2k <- function(cOut = NULL) {
     
   }
   
-  # PROCESS ROCK CREEK CONDITIONS ------------------------------------------------
-  # Try the following: 1) USGS-RockCk & 1) Logsden/Moonshine Rock Ck
+  # PROCESS ROCK CREEK CONDITIONS 
   # Combine the Rock Creek data renumber station to 99999
-  lswc$STAID <- ifelse((lswc$STAID == 38929 | lswc$STAID == 38930), 99999, lswc$STAID)
+  lswc$STAID <- ifelse((lswc$STAID == 38929 | lswc$STAID == 38930), 99999,
+                       lswc$STAID)
   
-  # Use this one for consistency
+  # Use USGS gage data for indicator variable for Rock Creek
   rUSG <- sta2sta_reg(df = lswc, st1 = 38918, st2 = 99999)
-  # rMoo <- sta2sta_reg(df = lswc, st1 = 37396, st2 = 99999, dir = pth2)
-  # rLog <- sta2sta_reg(df = lswc, st1 = 11246, st2 = 99999, dir = pth2)
-  
-  stn <- c(38918, 99999)
-  
+
   # Isolate the data for filling:
-  data = lswc[lswc$STAID %in% stn, c(1, 3, 5, 7)]
-  
-  pars <- names(data)[3 : 4]
-  
+  data = lswc[lswc$STAID %in% c(38918, 99999), c(1, 3, 5, 7)]
+
   hwTDO <- list()
   
   for (i in 1 : 2) {
@@ -289,40 +280,30 @@ lswcd_q2k <- function(cOut = NULL) {
     
   }
   
-  # Initial conditions ----
-  # Select all data from 2017-07-17 00:00
-  inDt <- as.POSIXct('2017-07-17 00:00', '%Y-%m-%d %H:%M', tz = 'America/Los_Angeles')
-  
-  iniC <- lswc[which(lswc$DATE.TIME == inDt), c(1, 3, 5, 7)]
+  # Initial conditions
+  # Select all data from start date (strD)
+  iniC <- lswc[which(lswc$DATE.TIME == strD), c(1, 3, 5, 7)]
   
   names(iniC) <- c('date', 'sta', 'temp', 'do')
   
-  # Assignments: 1. 38944 - 15 & 16; 2. 38300 - 14; 3. 10391 - 12 & 13;
-  #              4. 38918 - 7, 8, 11; 5. 37396 - 3 & 6
-  assn <- c(5, 5, 4, 4, 4, 3, 3, 2, 1, 1)
+  # Assign based on location and period of record
+  if (month(strD) < 8) {
+    
+    # Assignments: 1. 38944 - 15 & 16; 2. 38300 - 14; 3. 10391 - 12 & 13;
+    #              4. 38918 - 7, 8, 11; 5. 37396 - 3 & 6
+    assn <- c(5, 5, 4, 4, 4, 3, 3, 2, 1, 1)
+
+  } else {
+    
+    # Assignments: 1. 36367 - 15 & 16; 2. 38300 - 14; 3. 37848 - 12 & 13
+    #              4. 38918 - 11; 5. 38928 - 8; 6. 11246 - 7; 7. 37396 - 3 & 6
+    assn <- c(7, 7, 6, 5, 4, 3, 3, 2, 1, 1)
+    
+  }
   
   cOut[[13]]$tmp_dgC <- iniC[assn, 3]; cOut[[13]]$do_mgL <- iniC[assn, 4]
-  
-  # Initial conditions ----
-  
-  saveRDS(cOut, file = paste0(pth2, 'hspfIn_July2017.RData'))
-  
-  # CHECK!! ----
-  # hwTDO_L <- hwTDO; plts <- list()
-  # 
-  # for (i in 1 : 2) {
-  #   
-  #   hwTDO_L[[i]] <- melt(hwTDO_L[[i]], id.vars = 'date', value.name = pars[i], variable.name = 'STN')
-  #   
-  #   names(hwTDO_L[[i]]) <- c('date', 'stns', 'pars')
-  #   
-  #   plts[[i]] <- ggplot(data = hwTDO_L[[i]], aes(x = date, y = pars, color = stns)) +
-  #     geom_line()
-  #   
-  #   ggsave(filename = paste0('check_RcCk', pars[i], '.png'), plot = plts[[i]], path = pth2,
-  #          width = 10, height = 7.5, units = 'in', dpi = 300)
-  #   
-  # }
+
+  return(cOut)
 
 }
 
@@ -350,6 +331,8 @@ deq_cont_q2k <- function(cOut = NULL, seas = 'cw') {
                               tz = tz)
 
   # Create a season break date
+  strD <- min(cOut[['HW']]$date); endD <- max(cOut[['HW']]$date)
+  
   coDt <- as.POSIXct('2017-09-01', '%Y-%m-%d', tz = 'America/Los_Angeles')
 
   if (strD < coDt) {
@@ -358,6 +341,7 @@ deq_cont_q2k <- function(cOut = NULL, seas = 'cw') {
     deqC <- deqC[which(deqC$datetime >= coDt), ]
   } 
 
+  # _____________________________________________________________________________
   # CREATE pH TIMESERIES
   # Reshape the data and create the daily periodicity values
   pHdt <- dcast(data = deqC[ , c(13, 3, 8)], formula = datetime ~ SITENAME,
@@ -366,19 +350,20 @@ deq_cont_q2k <- function(cOut = NULL, seas = 'cw') {
   # FOR COLD-WATER Remove data before 7/17 16:00 and after 7/20 14:30
   if (strD < coDt) {pHdt <- pHdt[-c(1 : 22, 305 : nrow(pHdt)), ]}
   
-  t1 <- data.frame(date = seq(pHdt[1, 1], pHdt[nrow(pHdt), 1], 900))
+  t1 <- data.frame(date = seq(strD, endD, 900))
 
-  pHdt <- merge(ts, pHdt, by.x = 'date', by.y = 'datetime', all.x = T)
+  pHdt <- merge(t1, pHdt, by.x = 'date', by.y = 'datetime', all.x = T)
   
   # Add new columns to contain the sinusoidal regression; rename
   pHdt <- cbind(pHdt, matrix(data = 0, nrow = nrow(pHdt), ncol = 3))  
 
   names(pHdt)[5 : 7] <- paste0('reg_', names(pHdt)[2 : 4])
-  
+
   # Add a column for periodicity
   pHdt$per <- (hour(pHdt$date) + minute(pHdt$date) / 60) / 24
   
   # Calculate the sinusoidal coefficients and the lines of best fit
+  # PERHAPS NEED TO RETHINK THIS!! GO WITH DAILY MAX/MINS
   c = list()
   
   for (i in 1 : 3) {
@@ -399,56 +384,22 @@ deq_cont_q2k <- function(cOut = NULL, seas = 'cw') {
   }
   
   # PLOT TO CHECK
-  x <- melt(data = pHdt, id.vars = 'datetime', value.name = 'pH', variable.name = 'st')  
-  
-  windows(12, 12)
-  
-  pl <- ggplot(data = x[which(x$st != 'per'), ],
-               aes(x = datetime, y = pH, color = st)) + geom_point(); pl
-  
+  # x <- melt(data = pHdt, id.vars = 'date', value.name = 'pH',
+  #           variable.name = 'st')  
+  # 
+  # windows(12, 12)
+  # 
+  # pl <- ggplot(data = x[which(x$st != 'per'), ],
+  #              aes(x = date, y = pH, color = st)) + geom_point(); pl
 
-  
-  
-  
-  
-  
-    
-  # Rename column
-  pHdt$SITENAME <- substr(x = pHdt$SITENAME, start = 1, stop = 5)
-
-  # Create and merge ts and pHdt to get a complete calibration period
-  ts <- data.frame(date = seq(as.POSIXct(strD, '%Y-%m-%d', tz = tz),
-                              as.POSIXct(endD, '%Y-%m-%d', tz = tz), 900))
-  
-  pHdt <- merge(ts, pHdt, by.x = 'date', by.y = 'datetime', all.x = T)
-  
-  
-    
-    
-  # Create time series
-
-  
-
-  pHdt <- pHdt[which(pHdt$datetime <= coDt), ]
-  
-
-  
-  
-  
-  
-  
-
-
-  
-  # ASSIGN pH BY BASIN (geographical proxy) ----
-  # ODEQ-36367 (JMP)  - B14-B16, TW
-  # ODEQ-38918 (USGS) - B07, B08, B11-B13
-  # ODEQ-37396 (MOON) - B03, B06
+  # Assign pH by basin (geographical proxy): ODEQ-36367 (JMP) - B14-B16, TW; 
+  # ODEQ-38918 (USGS) - B07, B08, B11-B13; ODEQ-37396 (MOON) - B03, B06
   # First reduce to hourly
-  ts <- seq(as.POSIXct('2017-07-17', '%Y-%m-%d', tz = 'America/Los_Angeles'),
-            as.POSIXct('2017-07-22', '%Y-%m-%d', tz = 'America/Los_Angeles'), 3600)
+  ts <- seq(strD,endD, 3600)
   
-  pHdt <- pHdt[which(pHdt$date %in% ts), c(1, 6, 8, 7)]
+  head(pHdt)
+  
+  pHdt <- pHdt[which(pHdt$date %in% ts), c(1, 5, 7, 6)]
   
   # Set columns to populate from pHdt
   #         HW, 03, 06, 07, 08, 11, 12, 13, 14, 15, 16, TW
@@ -462,33 +413,32 @@ deq_cont_q2k <- function(cOut = NULL, seas = 'cw') {
     
   }
   
-  # CREATE CONDUCTIVITY TIME SERIES ----
-  # Find means of stations/season
-  cdDt <- deqC[which(deqC$datetime <= coDt), c(13, 3, 5)]; cdDt <- cdDt[-1, ]
+  # _____________________________________________________________________________
+  # CREATE CONDUCTIVITY TIME SERIES
+  cdDt <- dcast(data = deqC[ , c(13, 3, 5)], formula = datetime ~ SITENAME,
+                value.var = 'COND', fun.aggregate = mean)
   
-  cdDt$SITENAME <- substr(x = cdDt$SITENAME, start = 1, stop = 5)
+  cdMn <- colMeans(cdDt[, 2 : 4], na.rm = T)
   
-  cdMn <- aggregate(cdDt$COND, by = list(cdDt$SITENAME), FUN = 'mean')
-  
-  cdMn <- cdMn[c(1, 3, 2), ]
+  cdMn <- cdMn[c(1, 3, 2)]
   
   # Assign Cond as per the pH
   for (i in 1 : 12) {
     
     if (i == 1) {cdCol = 4} else if (i == 12) {cdCol = 3} else {cdCol = 5}
     
-    cOut[[i]][, cdCol] <- cdMn[pHcl[i] - 1, 2]
+    cOut[[i]][, cdCol] <- cdMn[pHcl[i] - 1]
     
   }
   
-  # ASSIGN INITIAL CONDITIONS ----
+  # ASSIGN INITIAL CONDITIONS
   # Assign pH according to the pH column vector, minus HW/TW
   cOut[['Init']]$pH <- unlist(pHdt[1, pHcl[2 : 11]])
   
-  # Assign pH according to the pH column vector, minus HW/TW
-  cOut[['Init']]$cnd_uSc <- unlist(cdMn[(pHcl[2 : 11] - 1), 2])
+  # Assign cond according to the pH column vector, minus HW/TW
+  cOut[['Init']]$cnd_uSc <- unlist(cdMn[(pHcl[2 : 11] - 1)])
   
-  # ASSIGN ALKALINITY (@ 20 mg/L CaCO3) ----
+  # ASSIGN ALKALINITY (@ 20 mg/L CaCO3)
   # Boundaries
   for (i in 1 : 12) {
     

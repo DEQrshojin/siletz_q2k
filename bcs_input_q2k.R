@@ -2,6 +2,10 @@ library(lubridate)
 
 source("D:/siletz_q2k/04_scripts/bcs_functions_q2k.R")
 
+# Cold-water period
+# strD <- '2017-07-17'; endD <- '2017-07-22'
+
+# Spawning period
 strD <- '2017-09-10'; endD <- '2017-09-15'
 
 oDir <- 'D:/siletz_q2k/02_input/' # Output director for csv files
@@ -18,7 +22,7 @@ cOut <- hspf_q2k(cOut = cOut, strD = strD, endD = endD, dir = iDir)
 
 # __________________________________________________________________________----
 # LSWCD DATA ----
-cOut <- lswcd_q2k(cOut = cOut, strD = strD, endD = endD)
+cOut <- lswcd_q2k(cOut = cOut)
 
 # __________________________________________________________________________----
 # DEQ CONT DATA ----
@@ -30,4 +34,7 @@ cOut <- deq_grab_q2k(cOut = cOut)
 
 # __________________________________________________________________________----
 # WRITE BCs TO CSV ----
-cOut <- write_bcs_q2k(cOut = cOut, oPth = oDir, sveRDS = NULL, addSfx = NULL)
+addSfx <- 'sep2017'; saveRDS <- 'BC_inputs_sep2017'
+
+cOut <- write_bcs_q2k(cOut = cOut, oPth = oDir, sveRDS = saveRDS,
+                      addSfx = addSfx)
