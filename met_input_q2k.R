@@ -2,7 +2,7 @@
 source('D:/siletz_q2k/04_scripts/met_functions_q2k.R')
 
 # CHANCE DATES HERE
-strD = "2017-07-17"; endD = "2017-07-22"
+strD = "2017-09-10"; endD = "2017-09-15"
 # CHANCE DATES HERE
 
 for (i in 1) {
@@ -72,8 +72,12 @@ for (i in 1) {
 }
 
 # SAVE FILES ----
-# write.csv(x = airT, file = 'D:/siletz_q2k/02_input/air_temp.csv', row.names = F)
-# write.csv(x = dwpT, file = 'D:/siletz_q2k/02_input/dwp_temp.csv', row.names = F)
-# write.csv(x = cCov, file = 'D:/siletz_q2k/02_input/cloud_cover.csv', row.names = F)
-# write.csv(x = wndU, file = 'D:/siletz_q2k/02_input/wind_speed.csv', row.names = F)
-# write.csv(x = solr, file = 'D:/siletz_q2k/02_input/solar.csv', row.names = T)
+
+write.csv(x = airT, file = 'D:/siletz_q2k/02_input/air_temp_sep_10_15.csv', row.names = F)
+write.csv(x = dwpT, file = 'D:/siletz_q2k/02_input/dwp_temp_sep_10_15.csv', row.names = F)
+write.csv(x = cCov, file = 'D:/siletz_q2k/02_input/cloud_cover_sep_10_15.csv', row.names = F)
+write.csv(x = wndU, file = 'D:/siletz_q2k/02_input/wind_speed_sep_10_15.csv', row.names = F)
+write.csv(x = solr, file = 'D:/siletz_q2k/02_input/solar_sep_10_15.csv', row.names = T)
+
+
+

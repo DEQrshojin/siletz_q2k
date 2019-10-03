@@ -277,7 +277,7 @@ solar_q2k <- function(strD = NULL, endD = NULL) {
   
   tz = 'America/Los_Angeles'
   
-  dtes <- as.POSIXct(c('2017-07-17', '2017-07-22'), '%Y-%m-%d', tz = tz)
+  dtes <- as.POSIXct(c(strD, endD), '%Y-%m-%d', tz = tz)
   
   solr <- data.frame(date = seq(dtes[1], dtes[length(dtes)], 3600))
   
