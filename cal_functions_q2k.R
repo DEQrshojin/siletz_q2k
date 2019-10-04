@@ -1,3 +1,102 @@
+# CREATE PEST MOD OBJECT ----
+mod4PEST <- function(mOut = NULL, obID = NULL, strD = NULL, fOut = NULL) {
+  
+  # This function:
+  # 1) Reads the Qual2Kw output file
+  # 2) Processes the data
+  # 3) Preps the data for output
+  # 4) Writes the data to file
+  # Specify: output file directory (mOut) and the observations IDs (obID) 
+  
+  # ________________________________________________________________________----  
+  # Load and process model data ----
+  library(dplyr); library(reshape2)
+    
+  if (substr(mOut, nchar(mOut), nchar(mOut)) != '/') {mOut <- paste0(mOut, '/')}
+  
+  mOut <- paste0(mOut, 'dynamic_MC', c('a', 'b'), '.txt')
+
+  # DATA
+  dt <- list(f1 = readLines(mOut[1]), f2 = readLines(mOut[2]))
+
+  for (i in 1 : 2) {
+    
+    # Split into columns  
+    dt[[i]] <- data.frame(do.call("rbind", strsplit(dt[[i]], "\\s+")),
+                          stringsAsFactors = F)
+    
+    # Remove the first column and rename the columns to row 1
+    dt[[i]] <- dt[[i]][, -1]; names(dt[[i]]) <- dt[[i]][1, ]
+    
+    # Remove rows 1 & 2
+    dt[[i]] <- dt[[i]][-(1 : 2), ]
+    
+    # Make values numeric
+    dt[[i]] <- data.frame(apply(dt[[i]], MARGIN = 2, FUN = as.numeric),
+                          stringsAsFactors = F)
+
+  }
+  
+  # Combine into one DF and keep the necessary columns and rename
+  dt <- cbind(dt[[1]], dt[[2]]);
+
+  dt <- dt[, c(  1,   3,   4,   7,  24,  59,  12,  31,  35,   9,  15)]
+  
+  names(dt) <- c('rch', 'tme', 'tmp', 'doc', 'phX', 'rea', 'nox', 'tpX', 'toc',
+                 'bod', 'cha')
+
+  # Add a leading 0 to the reaches
+  dt$rch <- addZ(dt$rch)
+  
+  # Time - convert from days to seconds and convert to POSIXct
+  dt$tme <- as.POSIXct(dt$tme * 86400, origin = strD, tz = 'America/Los_Angeles') +
+            hours(7)
+  
+  # Melt to long
+  dt <- melt(dt, id.vars = c('tme', 'rch'), variable.name = 'par', value.name = 'val')
+
+  # Separate reaeration for aggregation
+  dtR <- dt[which(dt$par == 'rea'), ]; dtE <- dt[-which(dt$par == 'rea'), ]
+
+  # Make the time into the units to which the data will be aggregated
+  dtR$tme <- floor_date(dtR$tme, 'day'); dtE$tme <- floor_date(dtE$tme, 'hour')
+
+  # Aggregate to mean hourly values for all but reaeration
+  dtE <- aggregate(dtE$val, by = list(dtE$tme, dtE$rch, dtE$par),
+                   'mean', na.rm = T)
+
+  # Aggregate to mean daily values for reaeration
+  dtR <- aggregate(dtR$val, by = list(dtR$tme, dtR$rch, dtR$par),
+                   'mean', na.rm = T)
+
+  dtR$Group.1 <- dtR$Group.1 + hours(12)
+  
+  dt <- rbind(dtE, dtR); names(dt) <- c('date', 'q2kR', 'par', 'val')
+  
+  # Create the mdID for merging with obID
+  dt$mdID <- paste0('r', dt$q2kR, dt$par, addZ(month(dt$date)),
+                    addZ(day(dt$date)), addZ(hour(dt$date)))
+  
+  obID <- data.frame(obID = obID)
+  
+  # Merge the two obID with the mdID
+  dt <- merge(obID, dt, by.x = 'obID', by.y = 'mdID', all.x = T, all.y = F)
+  
+  # Create a df to order after merging
+  ord <- data.frame(par = c('tmp', 'doc', 'phX', 'rea', 'nox', 'tpX', 'toc',
+                            'bod', 'cha'), ord = c(1, 2, 3, 4, 5, 6, 7, 8, 9))
+  
+  dt <- merge(dt, ord)
+
+  dt <- dt %>% arrange(ord, q2kR, date)
+  
+  # ________________________________________________________________________----
+  # CREATE THE OUTPUT (.out) FILE
+  mOut <- paste0(dt$obID, '  ', format(dt$val, digits = 10, scientific = T))
+  
+  write.table(mOut, fOut, quote = F, row.names = F, col.names = F)
+
+}
 
 # CREATE PEST OBS OBJECT ----
 obs4PEST <- function(strD = NULL, endD = NULL) {
@@ -11,9 +110,6 @@ obs4PEST <- function(strD = NULL, endD = NULL) {
   # Libraries, Functions and Objects----
   library(reshape2); library(dplyr)
 
-  # Function to add a leading 0 if a number is less than 10
-  addZ <- function(v) {ifelse(v < 10, paste0(0, v), as.character(v))}
-  
   # ________________________________________________________________________----
   # Load And Process Data----  
   # Load observation data
@@ -24,41 +120,9 @@ obs4PEST <- function(strD = NULL, endD = NULL) {
   
   # ________________________________________________________________________----
   # Create A Master Keys Of Obs Id List----
-  # Exclude grabs, but make one of all continuous obs, and one of daily mean rear
-  dtes <- as.POSIXct(c(strD, endD), '%Y-%m-%d', tz = 'America/Los_Angeles')
+  obID <- create_key(strD = strD, endD = endD)
   
-  # dts1 are dates/times for continuous data, dts2 for reaeration
-  dts1 <- seq(dtes[1], dtes[2], 3600); dts2 <- seq(dtes[1], dtes[2], 86400)
-  
-  nmes <- c('tmp', 'doc', 'phX'); obID <- data.frame(stringsAsFactors = F)
-
-  # Continuous parameters
-  for (i in 1 : 3) {
-    
-    for (j in 1 : 10) {
-
-      # The key in order includes: reach#, parm, month, day, hour
-      temp <- data.frame(date = dts1, q2kR = addZ(rep(j, length(dts1)))) %>%
-              mutate(obID = paste0('r', q2kR, nmes[i], addZ(month(date)),
-                                   addZ(day(date)), addZ(hour(date))))
-      
-      obID <- rbind(obID, temp)
-
-    }
-  }
-  
-  # Reaeration
-  for (i in 1 : 10) {
-    
-    temp <- data.frame(date = dts2, q2kR = addZ(rep(i, length(dts2)))) %>%
-            mutate(obID = paste0('r', q2kR, 'rea', addZ(month(date)),
-                                 addZ(day(date)), 12)) # Add 12 for midday (avg)
-    
-    obID <- rbind(obID, temp)
-    
-  }
-  
-  obID$indx <- 1 : nrow(obID); max <- nrow(obID)
+  max <- nrow(obID)
   
   # ________________________________________________________________________----  
   # Process LSWCD Data----
@@ -80,6 +144,8 @@ obs4PEST <- function(strD = NULL, endD = NULL) {
   # Create the lswc data data frame for population with PEST obs data
   l <- data.frame(stringsAsFactors = F)
 
+  nmes <- unique(substr(obID$obID, 4, 6))
+  
   for (i in 3 : 4) {
 
     temp <- aggregate(lswc[, i], by = list(lswc$q2kR, lswc$hour), mean, na.rm = T)
@@ -817,4 +883,71 @@ output_obs <- function(df = NULL, fOut = NULL) {
   }
 }
 
+# CREATE MASTER KEY ----
+create_key <- function(strD = NULL, endD = NULL) {
+  
+  # This function creates a master observation ID key set for DO, temperature
+  # pH, and reaeration based on specified start and end dates. Assumes DO, temp
+  # and pH are all continuous (hourly) and reaeration is daily (mean)
 
+  # make one of all continuous obs, and one of daily mean rear
+  dtes <- as.POSIXct(c(strD, endD), '%Y-%m-%d', tz = 'America/Los_Angeles')
+  
+  # dts1 are dates/times for continuous data, dts2 for reaeration
+  dts1 <- seq(dtes[1], dtes[2], 3600); dts2 <- seq(dtes[1], dtes[2], 86400)
+  
+  nmes <- c('tmp', 'doc', 'phX'); obID <- data.frame(stringsAsFactors = F)
+  
+  # Continuous parameters
+  for (i in 1 : 3) {
+    
+    for (j in 1 : 10) {
+      
+      # The key in order includes: reach#, parm, month, day, hour
+      temp <- data.frame(date = dts1, q2kR = addZ(rep(j, length(dts1)))) %>%
+        mutate(obID = paste0('r', q2kR, nmes[i], addZ(month(date)),
+                             addZ(day(date)), addZ(hour(date))))
+      
+      obID <- rbind(obID, temp)
+      
+    }
+  }
+  
+  # Reaeration
+  for (i in 1 : 10) {
+    
+    temp <- data.frame(date = dts2, q2kR = addZ(rep(i, length(dts2)))) %>%
+      mutate(obID = paste0('r', q2kR, 'rea', addZ(month(date)),
+                           addZ(day(date)), 12)) # Add 12 for midday (avg)
+    
+    obID <- rbind(obID, temp)
+    
+  }
+  
+  obID$indx <- 1 : nrow(obID)
+  
+  return(obID)
+  
+}
+
+# CREATE PEST INSTRUCTION FILE ----
+ins4PEST <- function(obID = NULL, iOut = NULL) {
+  
+  # This function also creates the instruction file that PEST uses to access the
+  # model data in the .ins file. Specify a vector of observation IDs (master key)
+  obID <- append('pif $', paste0('l1 [', obID, ']14:29'))
+  
+  write.table(x = obID, file = iOut, quote = F, row.names = F, col.names = F)
+  
+}
+
+# ADD A LEADING ZERO ----
+addZ <- function(v) {
+  
+  # Function to add a leading 0 to a vector of #s if a number is less than 10
+  # This is for vectors of minutes, hours, days, and months where there are only 
+  # one or two digits
+
+  ifelse(v < 10, paste0(0, v), as.character(v))
+  
+}
