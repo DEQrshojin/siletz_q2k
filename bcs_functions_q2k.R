@@ -185,7 +185,9 @@ hspf_q2k <- function(cOut = NULL, strD = NULL, endD = NULL, dir = NULL) {
 
 # __________________________________________________________________________----
 # PROCESS LSWCD DATA ----
-lswcd_q2k <- function(cOut = NULL) {
+lswcd_q2k <- function(cOut = NULL, dir = NULL) {
+  
+  library(dplyr)
   
   lswc <- read.csv(paste0('//deqhq1/tmdl/TMDL_WR/MidCoast/Models/Dissolved Oxyge',
                           'n/Middle_Siletz_River_1710020405/001_data/wq_data/Mon',
@@ -195,96 +197,42 @@ lswcd_q2k <- function(cOut = NULL) {
   lswc$DATE.TIME <- as.POSIXct(lswc$DATE.TIME, '%m/%d/%Y %H:%M',
                                tz = 'America/Los_Angeles')
 
-  # PROCESS HEADWATER CONDITIONS
-  # Moonshine regressions -- Use this for before 7/17/2017 and for Spawning
-  rMoo <- sta2sta_reg(df = lswc, st1 = 37396, st2 = 38912)
+  # Import the regression parameters, relate all stations to Moonshine station
+  regs <- read.csv("D:/siletz_q2k/02_input/ctsi/summary_NN.csv")
   
-  # Logsden regressions -- Use this for after 7/17/2017
-  rLog <- sta2sta_reg(df = lswc, st1 = 11246, st2 = 38912)
+  # Re-order based on reach order
+  regs <- regs %>% arrange(rch)
+  
+  # Also need to reimport the hspf flow data for the confluence and trim to dates
+  qlc <- readRDS(paste0(dir, '/rchQLC_NOx.RData'));
 
-  # Isolate the data for filling:
-  data = lswc[lswc$STAID %in% c(11246, 37396, 38912), c(1, 3, 5, 7)]
-
-  pars <- names(data)[3 : 4]
+  qlc <- qlc[[1]][which(qlc[[1]]$Date %in% cOut[[1]]$date), 1 : 3]
   
-  coDt <- as.POSIXct('2017-07-17 14:00', '%Y-%m-%d %H:%M', tz = 'America/Los_Angeles')
+  # Isolate the Moonshine station data -- these data will form the basis of the
+  # other temperature boundary conditions, including the headwaters.
+  moon <- lswc[which(lswc$STAID == 37396 & lswc$DATE.TIME %in% cOut[[1]]$date), ]
   
-  hwTDO <- list()
+  # Perform the correlations - start with the confluence first, which requires 
+  # mixing the north and south confluence flow and temps. First trim to dates
+  # Mix and populate the output (cOut) list headwater temperatures
+  cOut[[1]]$tmp_dgC <- (regF(m = regs$m[1], b = regs$b[1], x = moon$TEMP_C) * qlc$Bas1 +
+                        regF(m = regs$m[2], b = regs$b[2], x = moon$TEMP_C) * qlc$Bas2) /
+                       (qlc$Bas1 + qlc$Bas2)
   
-  for (i in 1 : 2) {
+  # Populate inflow temp bcs; use regressions for Rock Creek for consistency
+  for (i in 2 : (length(cOut) - 1)) {cOut[[i]]$tmp_dgC <- regF(m = regs$m[i + 1],
+                                                               b = regs$b[i + 1],
+                                                               x = moon$TEMP_C)}
+  
+  # Populate inflow DO bcs. Assume 100% saturation
+  for (i in 1 : (length(cOut) - 1)) {
     
-    temp <- dcast(data = data, formula = DATE.TIME ~ STAID, value.var = pars[i],
-                  fun.aggregate = mean)
-    
-    names(temp) <- c('date', paste0(pars[i], '_', names(temp)[2 : 4]))
-    
-    # Fill in the Confluence NAs from Moonshine
-    cnd1 <- which(temp$date < coDt); cnd2 <- which(temp$date >= coDt)
-    
-    temp[cnd1, 4] <- ifelse(is.na(temp[cnd1, 4]),
-                            regF(rMoo[i, 1], rMoo[i, 2], temp[cnd1, 3]),
-                            temp[cnd1, 4])
-    
-    # Fill in the Confluence NAs from Logsden
-    temp[cnd2, 4] <- ifelse(is.na(temp[cnd2, 4]),
-                            regF(rLog[i, 1], rLog[i, 2], temp[cnd2, 2]),
-                            temp[cnd2, 4])
-    
-    hwTDO[[i]] <- temp
+    cOut[[i]]$do_mgL <- do_sat(temp = cOut[[i]]$tmp_dgC, elev = regs$elv[i + 1])
     
   }
-  
-  # Populate headwater and boundary conditions with above TS; headwaters first!
-  # The Headwater conditions will also be the inflow conditions for basins 3 & 6
-  for (i in 1 : 3) {
-    
-    cOut[[i]]$tmp_dgC <- hwTDO[[1]][which(hwTDO[[1]]$date %in% cOut[[i]]$date), 4]
-    
-    cOut[[i]]$do_mgL <- hwTDO[[2]][which(hwTDO[[2]]$date %in% cOut[[i]]$date), 4]
-    
-  }
-  
-  # PROCESS ROCK CREEK CONDITIONS 
-  # Combine the Rock Creek data renumber station to 99999
-  lswc$STAID <- ifelse((lswc$STAID == 38929 | lswc$STAID == 38930), 99999,
-                       lswc$STAID)
-  
-  # Use USGS gage data for indicator variable for Rock Creek
-  rUSG <- sta2sta_reg(df = lswc, st1 = 38918, st2 = 99999)
 
-  # Isolate the data for filling:
-  data = lswc[lswc$STAID %in% c(38918, 99999), c(1, 3, 5, 7)]
-
-  hwTDO <- list()
-  
-  for (i in 1 : 2) {
-    
-    temp <- dcast(data = data, formula = DATE.TIME ~ STAID, value.var = pars[i],
-                  fun.aggregate = mean)
-    
-    names(temp) <- c('date', paste0(pars[i], '_', names(temp)[2 : 3]))
-    
-    temp[, 3] <- ifelse(is.na(temp[, 3]),
-                        regF(rMoo[i, 1], rMoo[i, 2], temp[, 2]),
-                        temp[, 3])
-    
-    hwTDO[[i]] <- temp
-    
-  }
-  
-  for (i in 4 : 12) {
-    
-    cOut[[i]]$tmp_dgC <- hwTDO[[1]][which(hwTDO[[1]]$date %in% cOut[[i]]$date), 3]
-    
-    cOut[[i]]$do_mgL <- hwTDO[[2]][which(hwTDO[[2]]$date %in% cOut[[i]]$date), 3]
-    
-  }
-  
-  # Initial conditions
-  # Select all data from start date (strD)
-  iniC <- lswc[which(lswc$DATE.TIME == strD), c(1, 3, 5, 7)]
-  
-  names(iniC) <- c('date', 'sta', 'temp', 'do')
+  # Initial conditions; select all data from start date (strD)
+  iniC <- lswc[which(lswc$DATE.TIME == cOut[[1]]$date[1]), c(1, 3, 5, 7)]
   
   # Assign based on location and period of record
   if (month(strD) < 8) {
@@ -292,7 +240,7 @@ lswcd_q2k <- function(cOut = NULL) {
     # Assignments: 1. 38944 - 15 & 16; 2. 38300 - 14; 3. 10391 - 12 & 13;
     #              4. 38918 - 7, 8, 11; 5. 37396 - 3 & 6
     assn <- c(5, 5, 4, 4, 4, 3, 3, 2, 1, 1)
-
+    
   } else {
     
     # Assignments: 1. 36367 - 15 & 16; 2. 38300 - 14; 3. 37848 - 12 & 13
@@ -302,7 +250,7 @@ lswcd_q2k <- function(cOut = NULL) {
   }
   
   cOut[[13]]$tmp_dgC <- iniC[assn, 3]; cOut[[13]]$do_mgL <- iniC[assn, 4]
-
+  
   return(cOut)
 
 }
@@ -572,6 +520,138 @@ write_bcs_q2k <- function(cOut = NULL, oPth = NULL, sveRDS = NULL,
 }
 
 # __________________________________________________________________________----
+# EXPAND WR DIVERSIONS FOR Q2K ----
+exp_dvs <- function(cOut = NULL, dvs = NULL) {
+  
+  # This function takes a csv input in hourly diversion data by basin and popul-
+  # ates the reach bcs list data
+  
+  library(lubridate); library(reshape2); library(dplyr)
+  
+  dvs <- read.csv(dvs, stringsAsFactors = F)
+  
+  # Add columns for reaches 1 - 3; reorder columns
+  dvs$R02 <- dvs$R01 <- 0; dvs <- dvs[, c(1, 10, 11, 2 : 9)]
+  
+  # Create the time series with an hour column
+  dvsL <- data.frame(date = seq(cOut[[1]]$date[1],
+                                cOut[[1]]$date[nrow(cOut[[1]])],
+                                3600), stringsAsFactors = F) %>%
+          mutate(hour = hour(date))
+
+  # Merge the two tables (dvs and dvsL)
+  dvsL <- merge(dvsL, dvs, by.x = 'hour', by.y = 'Hour', all.x = T, all.y = T)
+
+  # Reorder on date
+  dvsL <- dvsL %>% arrange(date)
+  
+  # Popluate the diversion column of each BC data frame
+  for (i in 2 : 11) {cOut[[i]]$abs_cms = dvsL[, i + 1]}
+  
+  return(cOut)
+  
+}
+
+# __________________________________________________________________________----
+# STP DISCHARGE ----
+stp_bcs <- function(cOut = NULL, stp = NULL, q2kR = NULL) {
+  
+  # This function daily stp data and expands to an hourly time series and popul-
+  # ates the reach bcs list data for the specified Q2K reach; if data don't exist
+  # for the modeling time period, then the ts is populated with the mean monthly
+  # of all of the data.
+  
+  library(lubridate); library(reshape2); library(dplyr); library(tidyr)
+
+  # Read and summarize the data
+  stp <- read.csv(stp, stringsAsFactors = F)
+
+  stp$DATE <- as.POSIXct(stp$DATE, '%m/%d/%Y', tz = 'America/Los_Angeles')
+
+  stpM <- summarize_DMR(stp)
+  
+  # Remove the influent WQ columns from the daily data
+  stp <- stp[, -c(2 : 6)]
+
+  # Supplement parameters with no DMR data -- from permit data application and
+  # Reid etal 2014 - Field valid of SBR to attain low nutrient levels (for P)
+  stpM$do_e  <- 6.3; stp$do_e  <- 6.3         # mg/L
+  stpM$nox_e <- 2.7; stp$nox_e <- 2.7         # mg/L
+  stp$orn_e  <- stp$NH3 * (2.0 / 1.32 - 1)    # NH3 * (TKN / NH3 - 1) from RPA
+  stpM$orn_e <- stpM$nh3_e * (2.0 / 1.32 - 1) # NH3 * (TKN / NH3 - 1) from RPA
+  # TP (2.5 mg/L) from DMR & (% PO4 & % org P) from Reid etal 2014
+  stpM$orp_e <- 2.50 * 0.45; stp$orp_e <- 2.50 * 0.45 
+  stpM$po4_e <- 2.50 * 0.55; stp$po4_e <- 2.50 * 0.55
+  stpM$cnd_e <- 157; stp$cnd_e <- 157         # mg/L
+  
+  # Convert N and P species from mg/L to ug/L
+  for (i in c(8, 11 : 14)) {stp[, i] <- stp[, i] * 1000; stpM[, i] <- stpM[, i] * 1000}
+  
+  # Convert the flow from MGD to m^3s^-1
+  stp$Q_E <- stp$Q_E * 4.3812636389e-2; stpM$q_e <- stpM$q_e * 4.3812636389e-2
+  
+  # Forward fill the gaps for missing dates
+  stp <- fill(stp, 2 : 15, .direction = 'downup')
+
+  # Pull out dataframe for river, STP reach, and mixed WQ
+  rivr <- wwtp <- cOut[[q2kR + 1]]
+
+  # Set the WWTP and mixed dfs to zero
+  wwtp[, c(2 : (length(wwtp) - 1))] <- 0; mxWQ <- wwtp
+
+  # Match the columns
+  mtch <- data.frame(pars = names(wwtp)[3 : length(wwtp)],
+                     cOut = 3 : length(wwtp),
+                     dmrs = c(4, 2, 15,  6, 10, NA,  5, 12,  8, 11, 13, 14, NA,
+                              NA, NA, NA, 9,  3), stringsAsFactors = F)
+  
+  dtes <- unique(date(wwtp$date))
+  
+  for (j in 1 : length(dtes)) { # Iterate through each day
+
+    # Create a temporary df of one row based on the date (preferred) or month
+    if (length(which(dtes[j] == stp$DATE)) > 0) {
+      
+      tmp1 <- stp[which(stp$DATE == dtes[j]), ] # Isolate the data for that day  
+      
+    } else {
+      
+      tmp1 <- stpM[which(stpM$mnth == month(dtes[j])), ] # Isolate data for month 
+      
+    }
+
+    for (i in 1 : nrow(mtch)) { # Iterate through columns
+      
+      if (is.na(mtch[i, 3])) { # Check id data = NA, and populate with 0 is so
+        
+        wwtp[which(date(wwtp$date) == dtes[j]), mtch[i, 2]] <- 0
+        
+      } else {
+        
+        wwtp[which(date(wwtp$date) == dtes[j]), mtch[i, 2]] <- tmp1[, mtch[i, 3]]
+          
+      }
+    }
+  }
+  
+  # Mixing of inflows and STP (mass balance - acting as a combined stream)
+  # First the flows
+  mxWQ$qIn_cms <- wwtp$qIn_cms + rivr$qIn_cms
+  
+  for (i in 4 : 20) {
+    
+    mxWQ[, i] <- (wwtp$qIn_cms * wwtp[, i] + rivr$qIn_cms * rivr[, i]) /
+                  mxWQ$qIn_cms
+    
+  }
+  
+  cOut[[q2kR + 1]] <- mxWQ
+
+  return(cOut)
+  
+}
+
+# __________________________________________________________________________----
 # Supporting Functions ----
 sta2sta_reg <- function(df = NULL, st1 = NULL, st2 = NULL, dir = NULL) {
 
@@ -584,20 +664,24 @@ sta2sta_reg <- function(df = NULL, st1 = NULL, st2 = NULL, dir = NULL) {
 
   # Import format R2 for displaying R^2 on plots  
   source('D:/siletz/scripts/R/water_quality_calib.R')
+
+  names(df) <- c('date', 'seas', 'stid', 'stas', 'temp', 'tdql', 'do_c', 'do_s',
+                 'ddql')
   
-  df <- df[which(df$STAID == st1 | df$STAID == st2), c(1, 3, 5, 7)]
+  df <- df[which(df$stid == st1 | df$stid == st2), c(1, 3, 5, 7)]
   
   pars <- names(df)[3 : 4]
   
   xy <- data.frame(x = c(12.5, 9), y = c(15, 11))
   
-  regs <- data.frame(m = c(0, 0), b = c(0, 0), r2 = c(0, 0))
+  regs <- data.frame(m = c(0, 0), b = c(0, 0), r2 = c(0, 0), pm = c(0, 0),
+                     pb = c(0, 0))
   
   row.names(regs) <- c('temp', 'DO')
   
-  for (i in 1 : 2) {
+  for (i in 1) { # Just to temperature for the moment} : 2) {
     
-    temp <- dcast(data = df, formula = DATE.TIME ~ STAID, value.var = pars[i],
+    temp <- dcast(data = df, formula = date ~ stid, value.var = pars[i],
                   fun.aggregate = mean)
     
     names(temp) <- c('date', paste0('sta_', names(temp)[2 : 3]))
@@ -614,7 +698,8 @@ sta2sta_reg <- function(df = NULL, st1 = NULL, st2 = NULL, dir = NULL) {
             mutate(regL = t_reg[[4]][[1]] + t_reg[[4]][[2]] * mnmx)
     
     regs[i, ] <- c(t_reg$coefficients[[2]], t_reg$coefficients[[1]],
-                   t_reg$adj.r.squared)
+                   t_reg$adj.r.squared, t_reg[['coefficients']][2, 4],
+                   t_reg[['coefficients']][1, 4])
     
     if (!is.null(dir)) {
       
@@ -626,10 +711,11 @@ sta2sta_reg <- function(df = NULL, st1 = NULL, st2 = NULL, dir = NULL) {
               geom_point(color = 'blue', size = 0.6) + theme_bw() +
               geom_line(data = regL, aes(x = mnmx, y = regL), size = 1.6) +
               annotate('text', x = xy[i, 1], y = xy[i, 2], parse = T, label = lbl,
-                       hjust = 0, size = 6); plot
+                       hjust = 0, size = 6)
       
-      ggsave(filename = paste0('stas', st1, '_', st2, '_', pars[i], '_regrss.png'),
-             plot = plot, path = pth2, width = 10, height = 7.5, units = 'in', dpi = 300)
+      ggsave(filename = paste0('regrss_', pars[i], '_', st2, '_', st1, '.png'),
+             plot = plot, path = dir, width = 10, height = 7.5, units = 'in',
+             dpi = 300)
       
     }
   }
@@ -685,5 +771,81 @@ init_bcs <- function(strD = NULL, endD = NULL) {
                B16 = latQ, TW = hdwr[, -2], Init = iniC)
   
   return(cOut)
+
+}
+
+summarize_DMR <- function(stp = stp) {
+
+  # Tack on a month column
+  stp$mnth <- lubridate::month(stp$DATE)
+  
+  # Aggregate to monthly values; effluent data starts at column 7
+  stpM <- stp[, c(7 : length(stp))] %>% group_by(mnth) %>%
+          summarise(tmp_e = mean(Temp_E, na.rm = T),
+                    pH_e  = mean(pH_E, na.rm = T),
+                    q_e   = mean(Q_E, na.rm = T),
+                    bod_e = mean(CBOD_E, na.rm = T),
+                    tss_e = mean(TSS_E, na.rm = T),
+                    tur_e = mean(Turbidity, na.rm = T),
+                    nh3_e = mean(NH3, na.rm = T),
+                    alk_e = mean(Alkalinity, na.rm = T))
+ 
+  # Deal with alk which has several NaNs incl. July set to global mean
+  stpM$alk_e <- mean(stp$Alkalinity, na.rm = T)
+  
+  return(stpM) 
+  
+}
+
+comp_ts <- function(df = NULL, st1 = NULL, st2 = NULL, dir = NULL) {
+  
+  # Function plots time series data from twp stations
+  
+  options(warn = -1)
+  
+  library(ggplot2); library(scales)
+  
+  # Import format R2 for displaying R^2 on plots  
+  source('D:/siletz/scripts/R/water_quality_calib.R')
+  
+  names(df) <- c('date', 'seas', 'stid', 'stas', 'temp', 'tdql', 'do_c', 'do_s',
+                 'ddql')
+  
+  df <- df[which(df$stid == st1 | df$stid == st2), c(1, 3, 5, 7)]
+
+  lims <- as.POSIXct(c('2004-06-01', '2004-11-01'), '%Y-%m-%d',
+                     tz = 'America/Los_Angeles')
+  
+  plot <- ggplot(data = df, aes(x = date, y = temp, color = stid)) +
+          geom_line() + theme_bw() + theme(axis.text.x = element_text(angle = 90)) +
+          scale_x_datetime(limits = lims, breaks = date_breaks("1 weeks"),
+                           labels = date_format("%m/%d"))
+  
+  ggsave(filename = paste0('timesr_temp_', st2, '_', st1, '.png'), plot = plot,
+         path = dir, width = 10, height = 7.5, units = 'in', dpi = 300)
+    
+}
+
+do_sat <- function(temp = NULL, elev = NULL) {
+  
+  # Function to calculate DO saturation at elevation. From: Benson, B.B., and
+  # Daniel Krause, Jr, 1984, The concentration and isotopic fractionation of 
+  # oxygen dissolved in freshwater and seawater in equilibrium with the 
+  # atmosphere: Limnology and Oceanography, vol. 29, no. 3, p. 620-632.
+  # Assumes freshwater ~ salinity = 0
+
+  # Coefficients
+  yInt <-   -139.34411
+  a    <-   1.575701e5
+  b    <-   6.642308e7
+  c    <-    1.2438e10
+  d    <-  8.621949e11
+
+  temp <- temp + 273.15 # convert to Kelvin
+  
+  doSat <- exp(yInt + a / temp - b / temp^2 + c / temp^3 - d / temp^4) *
+           (1 - 0.02255 * elev * 0.0003048)^5.256
+  
+  return(doSat)
 
 }
