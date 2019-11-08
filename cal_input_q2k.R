@@ -22,7 +22,7 @@ obs_CW <- remove_obs(dtes = dtes, parm = 'phX', q2kR = '09', obID = obs_CW)
 # OUTPUT OBSERVATIONS LIST FOR CONTROL (.PST) FILE ----
 df <- add_weights(obs_CW[["obs"]])
 
-fOut <- 'd:/siletz_q2k/08_pest/supp/obs_jul2017.txt'
+fOut <- 'd:/siletz_q2k/08_pest/05_supp/obs_jul2017.txt'
 
 df <- output_obs(df = df, fOut = fOut)
 
@@ -38,9 +38,9 @@ ins4PEST(obID = obID, iOut = iOut)
 # OUTPUT MODEL OUTPUT (.OUT) FILE ----
 obID <- obs_CW[["obs"]]$obID
 
-mOut <- 'd:/siletz_q2k/01_models/CW/20190930'
+mOut <- 'd:/siletz_q2k/08_pest/01_hydr'
 
-fOut <- 'd:/siletz_q2k/08_pest/siletz_CW.out'
+fOut <- 'd:/siletz_q2k/08_pest/01_hydr/slz_q2k.out'
 
 x <- mod4PEST(mOut, obID, strD, fOut)
 
@@ -55,6 +55,7 @@ oOut <- obs_CW[['obs']][, c(2, 3, 6, 5)]
 
 x <- cal_supp(strD, mOut, oOut, nDir)
 
-
-
+# ________________________________________________________________________----
+# HYDRAULIC CALIBRATION ----
+mOut <- 'D:/siletz_q2k/08_pest/01_hydr'
 
