@@ -2,7 +2,7 @@
 source('D:/siletz_q2k/04_scripts/met_functions_q2k.R')
 
 # CHANCE DATES HERE
-strD = "2017-09-10"; endD = "2017-09-15"
+strD = "2017-07-20"; endD = "2017-07-21"
 # CHANCE DATES HERE
 
 for (i in 1) {

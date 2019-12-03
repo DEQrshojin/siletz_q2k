@@ -5,9 +5,11 @@
 obs4PEST <- function(strD = NULL, endD = NULL) {
   
   # This function creates an observations object (list) for use in PEST based 
-  # on the amalgamation of data from various sources. Input the start and end
-  # dates for the output file; Also creates an output dataframe that is to be
-  # used in collated the model output data file.
+  # on the amalgamation of data from various sources. The object contains
+  # observation data including, the unique ID code, date/time, model reach,
+  # obs value, and PEST observation group.
+  # Input the start and end dates for the output file; Also creates an output
+  # dataframe that is to be used in collated the model output data file.
   
   # ________________________________________________________________________----
   # Libraries, Functions and Objects----
@@ -304,7 +306,7 @@ mod4PEST <- function(mOut = NULL, obID = NULL, strD = NULL, fOut = NULL) {
 
 }
 
-# CUSTOM CALIBRATION FUNCTIONS ----
+# WATER QUALITY CALIBRATION FUNCTIONS ----
 cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL) {
   
   # functions to assess and plot measured and modeled Qual2Kw
@@ -396,15 +398,15 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL) {
   # Plot! ----
   for (i in 1 : length(unique(dt$par))) {
 
-    # Time series graphs (facet station)  
+    # Time series graphs (facet station)
     datM <- dt[which(dt$par == unique(dt$par)[i] & dt$src == 'mod'), ]
     datO <- dt[which(dt$par == unique(dt$par)[i] & dt$src == 'obs'), ]
-    
+
     plt1 <- ggplot(dat = datM, aes(x = tme, y = val)) +
             geom_line(color = 'darkblue', size = 1.1) +
             ylab(paste0(pars[i, 2], ' (', pars[i, 3], ')')) +
             theme_bw() + theme(axis.title.x = element_blank()) +
-            facet_wrap(. ~ rch, ncol = 2, labeller = label_both) + 
+            facet_wrap(. ~ rch, ncol = 2, labeller = label_both) +
             geom_point(data = datO, aes(x = tme, y = val),
                        color = 'darkred', stroke = 1.1, shape = 5, size = 0.9)
 
@@ -414,17 +416,17 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL) {
     # Longitudinal graphs (facet day) x = rch, y = val, facet = dte, group = stt
     ddM <- dd[which(dd$par == unique(dd$par)[i] & dd$src == 'mod'), ]
     ddO <- dd[which(dd$par == unique(dd$par)[i] & dd$src == 'obs'), ]
-    
+
     plt2 <- ggplot(dat = ddM, aes(x = dst, y = val, group = stt)) +
             geom_line(color = 'darkblue', size = 1.1) +
             ylab(paste0(pars[i, 2], ' (', pars[i, 3], ')')) +
-            theme_bw() + facet_wrap(. ~ dte, ncol = 2) + 
+            theme_bw() + facet_wrap(. ~ dte, ncol = 2) +
             geom_point(data = ddO, aes(x = dst, y = val, group = stt),
                        color = 'darkred', stroke = 1.2, shape = 5, size = 1.1)
 
     ggsave(filename = paste0('long_', pars[i, 1], '.jpg'), plot = plt2, width = 15,
            height = 10, path = nDir, units = 'in', dpi = 300)
-    
+
   }
 
   # ________________________________________________________________________----    
@@ -695,9 +697,9 @@ remove_obs <- function(dtes = NULL, parm = NULL, q2kR = NULL, obID = NULL) {
 run_plots <- function(nDir = NULL, mOut = NULL) {
   
   # This function creates output plots (time series and longitudinal) for most
-  # recent run an output files in the PEST folder. It creates a directory based
-  # on directory name variable, then outputs to that directory. Highly customized
-  # and needs abstraction for broader use.
+  # recent run an output files in the PEST folder (mOut). It creates a directory 
+  # basedon directory name variable (nDir), then outputs to that directory. 
+  # Highly customized and needs abstraction for broader use.
   
   nDir <- paste0('D:/siletz_q2k/06_figures', '/', nDir)
   
@@ -734,44 +736,97 @@ run_plots <- function(nDir = NULL, mOut = NULL) {
   
 }
 
-# SPECIAL HYDRAULIC CALIBRATION FUNCTIONS ----
-hydraCal <- function(strD = NULL, mOut = NULL) {
+# Q-V-W HEATSOURCE RATING CURVE ----
+rating_curves <- function(df = NULL, par = NULL, file = NULL, trns = NULL) {
   
-  # This function performs the hydraulic calibration of the Qual2Kw model. It
-  # takes the Qual2Kw-modeled flow and estimates the depth, width, velocity every
-  # three hours at the USGS gage station. These are then compared to the modeled
-  # D, W, and U.
+  # Arguements: data frame of velocity and flow data
+  # Outputs: list of intercept, slope, coefficient of determination
+  # Optional variables include:
+  # 1) filename (with path) for a graph output of RG
+  # 2) transformation of variables.
+  # Transformation options include
+  # 1) 'none' for no transformation
+  # 2) 'NL' for a log (base 10) transformation of the response variable
+  # 3) 'LN' for a log (base 10) transformation of the indicator variable
+  # 4) 'LL' for a log (base 10) transformation of both variables
+  # Assumes data frame where flow is first variable, and velocity the second
   
-  library(lubridate)
+  library(ggplot2)
   
-  # Load the data
-  dt <- read_q2k_out(mOut)[c(1 : 3, 55 : 60)]
+  names(df) <- c('q', 'var') # Rename for convenience using specified parameter
   
-  # Pull out reach 5 for the USGS gage
-  dt <- dt[which(dt$Reach == 5), ]
+  # If a transformation is specified (trns) then transform the data
+  if (!is.null(trns)) {
+
+    if (trns == 'none') { # No transformation
+      
+      rg <- summary(lm(df$var ~ df$q))
+      
+      tFun <- function(a, b, x) a * x + b
+      
+    } else if (trns == 'NL') { # Normal (Ind) - Log (Resp)
+      
+      rg <- summary(lm(log10(df$var) ~ df$q))
+      
+      tFun <- function(a, b, x) 10^(a * x + b)
+      
+    } else if (trns == 'LN') { # Log (Ind) - Normal (Resp)
+      
+      rg <- summary(lm(df$var ~ log10(df$q)))
+      
+      tFun <- function(a, b, x) a * log10(x) + b
+      
+    } else if (trns == 'LL') { # Both Log
+      
+      rg <- summary(lm(log10(df$var) ~ log10(df$q)))
+      
+      tFun <- function(a, b, x) 10^b * x^a
+      
+    } else if (trns == 'NS') { # Normal (Ind) - SQRT (Resp)
+      
+      rg <- summary(lm(sqrt(df$var) ~ df$q))
+      
+      tFun <- function(a, b, x) (a^2 * x^2) + (2 * a * b * x) + b^2
+      
+    } else if (trns == 'SN') { # SQRT (Ind) - Normal (Resp)
+      
+      rg <- summary(lm(df$var ~ sqrt(df$q)))
+      
+      tFun <- function(a, b, x) a * sqrt(x) + b
+      
+    } else if (trns == 'SS') { # Both SQRT
+      
+      rg <- summary(lm(sqrt(df$var) ~ sqrt(df$q)))
+      
+      tFun <- function(a, b, x) (a^2 * x) + (2 * a * b * sqrt(x)) + b^2
+      
+    } 
+
+    else {print('Please enter a valid transformation.'); break}
+  }  
+
+  if (!is.null(file)) {
+
+    x <- seq(min(df$q) * 0.98, max(df$q) * 1.02,
+             (max(df$q) * 1.02 - min(df$q) * 0.98) / 100)
+
+    line <- data.frame(x = x, y = tFun(rg[[4]][2, 1], rg[[4]][1, 1], x))
+
+    plot <- ggplot(df, aes(x = q, y = var)) + theme_bw() +
+            geom_point(size = 1.5, shape = 23, color = 'darkred',
+                       stroke = 1.0, fill = 'yellow') + 
+            geom_line(data = line, aes(x = x, y = y))
+
+    ggsave(filename = file, plot = plot, width = 16, height = 9, units = 'in')
+    
+  }
+
+  # Return the trasnformation linear function, coefficients, and R2 value  
+  ls <- list(parameter = par,
+             tFun = tFun,
+             coef = c(a = rg[[4]][2, 1], b = rg[[4]][1, 1]),
+             r2   = rg[["adj.r.squared"]])
   
-  # Convert the times from decimal days to date-time
-  if (!is.POSIXct(strD)) {strD <- as.POSIXct(strD, '%Y-%m-%d', tz = 'America/Los_Angeles')}
-  
-  dt$Time <- as.POSIXct(dt$Time * 86400, origin = strD, tz = 'America/Los_Angeles')
-  
-  dt <- dt[which(minute(dt$Time) == 0), ]
-  
-  
-  
+  return(ls)
+
 }
-
-# READ THE USGS GAGE RATING CURVE FOR HYDRAULIC CALIBRATION ----
-# readRate <- function()
-
-
-
-
-
-
-
-
-
-
-
-

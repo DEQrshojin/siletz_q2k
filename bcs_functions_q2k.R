@@ -187,6 +187,10 @@ hspf_q2k <- function(cOut = NULL, strD = NULL, endD = NULL, dir = NULL) {
 # PROCESS LSWCD DATA ----
 lswcd_q2k <- function(cOut = NULL, dir = NULL) {
   
+  # Reads the LSWCD data and returns the Q2K boundary condition object with
+  # DO and temperature boundaries.
+  # Pass the BC object (cOut) and location of the HSPF data (.RData) files (dir)
+  
   library(dplyr)
   
   lswc <- read.csv(paste0('//deqhq1/tmdl/TMDL_WR/MidCoast/Models/Dissolved Oxyge',
@@ -257,7 +261,7 @@ lswcd_q2k <- function(cOut = NULL, dir = NULL) {
 
 # __________________________________________________________________________----
 # PROCESS DEQ CONT DATA ----
-deq_cont_q2k <- function(cOut = NULL, seas = 'cw') {
+deq_cont_q2k <- function(cOut = NULL) {
   
   # This script takes the continuous DEQ data and populates the times series data
   # for headwaters, initial and boundary conditions for conductivity and pH
@@ -554,7 +558,7 @@ exp_dvs <- function(cOut = NULL, dvs = NULL) {
 
 # __________________________________________________________________________----
 # STP DISCHARGE ----
-stp_bcs <- function(cOut = NULL, stp = NULL, q2kR = NULL) {
+stp_bcs <- function(cOut = NULL, stp = NULL, q2kR = NULL, csvOut = NULL) {
   
   # This function daily stp data and expands to an hourly time series and popul-
   # ates the reach bcs list data for the specified Q2K reach; if data don't exist
@@ -585,13 +589,15 @@ stp_bcs <- function(cOut = NULL, stp = NULL, q2kR = NULL) {
   stpM$cnd_e <- 157; stp$cnd_e <- 157         # mg/L
   
   # Convert N and P species from mg/L to ug/L
-  for (i in c(8, 11 : 14)) {stp[, i] <- stp[, i] * 1000; stpM[, i] <- stpM[, i] * 1000}
+  for (i in c(8, 11 : 14)) {
+    stp[, i] <- stp[, i] * 1000; stpM[, i] <- stpM[, i] * 1000
+  }
   
   # Convert the flow from MGD to m^3s^-1
   stp$Q_E <- stp$Q_E * 4.3812636389e-2; stpM$q_e <- stpM$q_e * 4.3812636389e-2
   
   # Forward fill the gaps for missing dates
-  stp <- fill(stp, 2 : 15, .direction = 'downup')
+  stp <- fill(stp, 2 : 15, .direction = 'up')
 
   # Pull out dataframe for river, STP reach, and mixed WQ
   rivr <- wwtp <- cOut[[q2kR + 1]]
@@ -606,7 +612,7 @@ stp_bcs <- function(cOut = NULL, stp = NULL, q2kR = NULL) {
                               NA, NA, NA, 9,  3), stringsAsFactors = F)
   
   dtes <- unique(date(wwtp$date))
-  
+
   for (j in 1 : length(dtes)) { # Iterate through each day
 
     # Create a temporary df of one row based on the date (preferred) or month
@@ -632,6 +638,16 @@ stp_bcs <- function(cOut = NULL, stp = NULL, q2kR = NULL) {
           
       }
     }
+  }
+
+  if (!is.null(csvOut)) {
+  
+    if (substr(csvOut, nchar(csvOut), nchar(csvOut)) != '/') {
+      csvOut <- paste0(csvOut, '/')
+    }
+    
+    write.csv(wwtp, paste0(csvOut, 'stp_raw.csv'), row.names = F)
+    
   }
   
   # Mixing of inflows and STP (mass balance - acting as a combined stream)
