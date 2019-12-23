@@ -1,8 +1,10 @@
+rm(list = ls())
+
 # LOAD FUNCTIONS, VARS & DATA ----
 source('D:/siletz_q2k/04_scripts/met_functions_q2k.R')
 
 # CHANCE DATES HERE
-strD = "2017-07-20"; endD = "2017-07-21"
+strD = "2017-07-07"; endD = "2017-08-29"
 # CHANCE DATES HERE
 
 for (i in 1) {
@@ -34,7 +36,7 @@ for (i in 1) {
   tmes <- minmax_time(mDat); tmnt <- tmes$min; tmxt <- tmes$max
   
   airT <- t_air_q2k(strD = strD, endD = endD, shp = shp, dir = dirA, tmxt = tmxt,
-                    tmnt = tmnt)
+                    tmnt = tmnt, nday = 21)
   
   # plot <- plot_temps(df = airT); windows(12, 12); plot
   # 
@@ -56,28 +58,29 @@ for (i in 1) {
   dpts$tdw_nwp <- (dpts$tdw_nwp - 32) / 1.8
   
   dwpT <- t_dwpnt_q2k(dpts = dpts, strD = strD, endD = endD, shp = shp, dir = dirW,
-                      tmxt = tmxt, tmnt = tmnt)
+                      tmxt = tmxt, tmnt = tmnt, nday = 21, airT = airT)
 
 }
 
 # CLOUD, WIND & SOLAR ----
 for (i in 1) {
  
-  cCov <- cloud_q2k(x = x, strD = strD, endD = endD)
+  cCov <- cloud_q2k(x = x, strD = strD, endD = endD, nday = 21)
   
-  wndU <- wind_q2k(x = x, strD = strD, endD = endD)
+  wndU <- wind_q2k(x = x, strD = strD, endD = endD, nday = 21)
   
-  solr <- solar_q2k(strD = strD, endD = endD)
+  # solr <- solar_q2k(strD = strD, endD = endD, nday = 7)
   
 }
 
 # SAVE FILES ----
+path <- 'D:/siletz_q2k/02_input/wq_cw_0707_0829/'; sffx <- 'cw17_wq'
 
-write.csv(x = airT, file = 'D:/siletz_q2k/02_input/air_temp_sep_10_15.csv', row.names = F)
-write.csv(x = dwpT, file = 'D:/siletz_q2k/02_input/dwp_temp_sep_10_15.csv', row.names = F)
-write.csv(x = cCov, file = 'D:/siletz_q2k/02_input/cloud_cover_sep_10_15.csv', row.names = F)
-write.csv(x = wndU, file = 'D:/siletz_q2k/02_input/wind_speed_sep_10_15.csv', row.names = F)
-write.csv(x = solr, file = 'D:/siletz_q2k/02_input/solar_sep_10_15.csv', row.names = T)
+write.csv(x = airT, file = paste0(path, 'air_temp_', sffx, '.csv'), row.names = F)
+write.csv(x = dwpT, file = paste0(path, 'dwp_temp_', sffx, '.csv'), row.names = F)
+write.csv(x = cCov, file = paste0(path, 'cld_covr_', sffx, '.csv'), row.names = F)
+write.csv(x = wndU, file = paste0(path, 'wind_spd_', sffx, '.csv'), row.names = F)
+# write.csv(x = solr, file = paste0(path, 'solr_rad_', sffx, '.csv'), row.names = T)
 
 
 

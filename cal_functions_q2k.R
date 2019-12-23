@@ -94,7 +94,10 @@ obs4PEST <- function(strD = NULL, endD = NULL) {
   # ________________________________________________________________________----
   # StreamMetabolizer Reaeration Data----
   k600 <- d[['k600']]; k600 <- k600[-which(k600$STA == '37848'), ] # STA 37848 = bad data!
-  
+
+  # Two seemingly anomolous results in Reach 7 (> 250/d)
+  k600 <- k600[which(k600$K600.daily < 100), ]
+    
   # Simplify data and rename station 29287 to 10391 (but really it's 29287)
   k600$STA <- ifelse(k600$STA == '29287', '10391', k600$STA)
   
@@ -224,7 +227,8 @@ ins4PEST <- function(obID = NULL, iOut = NULL) {
 }
 
 # CREATE PEST MOD OBJECT ----
-mod4PEST <- function(mOut = NULL, obID = NULL, strD = NULL, fOut = NULL) {
+mod4PEST <- function(mOut = NULL, obID = NULL, strD = NULL, fOut = NULL,
+                     wudy = NULL) {
   
   # This function:
   # 1) Reads the Qual2Kw output file
@@ -241,21 +245,26 @@ mod4PEST <- function(mOut = NULL, obID = NULL, strD = NULL, fOut = NULL) {
     
   dt <- read_q2k_out(mOut)
 
+  # Isolate only necessary columns
   dt <- dt[, c(  1,   3,   4,   7,  24,  59,  12,  31,  35,   9,  15)]
   
+  # rename for ease of use later
   names(dt) <- c('rch', 'tme', 'tmp', 'doc', 'phX', 'rea', 'nox', 'tpX', 'toc',
                  'bod', 'cha')  
+
+  # Remove warm-up days
+  dt <- dt[which(dt$tme >= wudy), ]; dt$tme <- dt$tme - wudy
+  
+  # Time - convert from days to seconds and convert to POSIXct
+  dt$tme <- as.POSIXct(dt$tme * 86400, origin = strD, tz = 'America/Los_Angeles') +
+            hours(7)
 
   # Convert nitrate and phosphate from ug/L to mg/L
   for (i in 7 : 8) {dt[, i] <- dt[, i] / 1000}
 
   # Add a leading 0 to the reaches
   dt$rch <- addZ(dt$rch)
-  
-  # Time - convert from days to seconds and convert to POSIXct
-  dt$tme <- as.POSIXct(dt$tme * 86400, origin = strD, tz = 'America/Los_Angeles') +
-            hours(7)
-  
+
   # Melt to long
   dt <- melt(dt, id.vars = c('tme', 'rch'), variable.name = 'par', value.name = 'val')
 
@@ -266,12 +275,10 @@ mod4PEST <- function(mOut = NULL, obID = NULL, strD = NULL, fOut = NULL) {
   dtR$tme <- floor_date(dtR$tme, 'day'); dtE$tme <- floor_date(dtE$tme, 'hour')
 
   # Aggregate to mean hourly values for all but reaeration
-  dtE <- aggregate(dtE$val, by = list(dtE$tme, dtE$rch, dtE$par),
-                   'mean', na.rm = T)
+  dtE <- aggregate(dtE$val, by = list(dtE$tme, dtE$rch, dtE$par), 'mean', na.rm = T)
 
   # Aggregate to mean daily values for reaeration
-  dtR <- aggregate(dtR$val, by = list(dtR$tme, dtR$rch, dtR$par),
-                   'mean', na.rm = T)
+  dtR <- aggregate(dtR$val, by = list(dtR$tme, dtR$rch, dtR$par), 'mean', na.rm = T)
 
   dtR$Group.1 <- dtR$Group.1 + hours(12)
   
@@ -288,14 +295,14 @@ mod4PEST <- function(mOut = NULL, obID = NULL, strD = NULL, fOut = NULL) {
   
   # Create a df to order after merging
   # For all WQ
-  # ord <- data.frame(par = c('tmp', 'doc', 'phX', 'rea', 'nox', 'tpX', 'toc',
-  #                           'bod', 'cha'), ord = c(1, 2, 3, 4, 5, 6, 7, 8, 9))
+  ord <- data.frame(par = c('tmp', 'doc', 'phX', 'rea', 'nox', 'tpX', 'toc',
+                            'bod', 'cha'), ord = c(1, 2, 3, 4, 5, 6, 7, 8, 9))
   
   # For temperature only
-  ord <- data.frame(par = c('tmp', 'rea'), ord = c(1, 2))
-  
+  # ord <- data.frame(par = c('tmp', 'rea'), ord = c(1, 2))
+   
   dt <- merge(dt, ord)
-
+   
   dt <- dt %>% arrange(ord, q2kR, date)
   
   # ________________________________________________________________________----
@@ -306,8 +313,35 @@ mod4PEST <- function(mOut = NULL, obID = NULL, strD = NULL, fOut = NULL) {
 
 }
 
+# CREATE OUPUT PLOTS ----
+run_plots <- function(nDir = NULL, mOut = NULL, wudy = NULL, strD = NULL,
+                      endD = NULL, adMt = NULL) {
+  
+  # This function creates output plots (time series and longitudinal) for most
+  # recent run an output files in the PEST folder (mOut). It creates a directory 
+  # basedon directory name variable (nDir), then outputs to that directory. 
+  # Highly customized and needs abstraction for broader use.
+  
+  nDir <- paste0('D:/siletz_q2k/06_figures', '/', nDir)
+  
+  if (!dir.exists(nDir)) {dir.create(nDir)}
+  
+  obs_CW <- obs4PEST(strD, endD)
+  
+  # Reduce the data frame and plot!
+  oOut <- obs_CW[['obs']][, c(2, 3, 6, 5)]
+  
+  # Run all WQ parameters
+  x <- cal_supp(strD, mOut, oOut, nDir, wudy)
+  
+  # Run temperature only
+  # x <- cal_supp_T(strD, mOut, oOut, nDir, wudy, adMt = adMt)
+  
+}
+
 # WATER QUALITY CALIBRATION FUNCTIONS ----
-cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL) {
+cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
+                     wudy = NULL) {
   
   # functions to assess and plot measured and modeled Qual2Kw
   # Arguments include the path to the folder with modeled output files and
@@ -324,28 +358,30 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL) {
   mOut <- read_q2k_out(mOut)
   
   mOut <- mOut[, c(  1,   3,   4,   7,  24,  59,  12,  31,  35,   9,  15)]
-  
+
   names(mOut) <- c('rch', 'tme', 'tmp', 'doc', 'phX', 'rea', 'nox', 'tpX', 'toc',
                    'bod', 'cha')
   
-  # Convert nitrate and phosphate from ug/L to mg/L
-  for (i in 7 : 8) {mOut[, i] <- mOut[, i] / 1000}
-  
-  # Add a leading 0 to the reaches
-  mOut$rch <- addZ(mOut$rch)
+  # Remove warm-up days
+  mOut <- mOut[which(mOut$tme >= wudy), ]; mOut$tme <- mOut$tme - wudy
   
   # Time - convert from days to seconds and convert to POSIXct
   mOut$tme <- as.POSIXct(mOut$tme * 86400, origin = strD, tz = 'America/Los_Angeles') +
               hours(7)
+
+  # Convert nitrate and phosphate from ug/L to mg/L
+  for (i in 7 : 8) {mOut[, i] <- mOut[, i] / 1000}
   
+  # Remove reach 00 (headwaters)
+  mOut <- mOut[which(mOut$rch != 0), ]
+
   # Melt to long
-  mOut <- melt(mOut, id.vars = c('tme', 'rch'), variable.name = 'par', value.name = 'val')
-  
-  mOut$par <- as.character(mOut$par)
+  mOut <- melt(mOut, id.vars = c('tme', 'rch'), variable.name = 'par',
+               value.name = 'val'); mOut$par <- as.character(mOut$par)
   
   # Observations - already bringing in a formated df, but just change the names
-  names(oOut) <- c('tme', 'rch', 'par', 'val')
-
+  names(oOut) <- c('tme', 'rch', 'par', 'val'); oOut$rch <- as.numeric(oOut$rch)
+  
   # Create a column in both for source (model/observation); bind the tables
   mOut$src <- 'mod'; oOut$src <- 'obs'; dt <- rbind(mOut, oOut)
   
@@ -381,24 +417,36 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL) {
   names(dd) <- c('rch', 'dte', 'par', 'src', 'val', 'stt')
 
   # Bring in river mile for plotting
-  rows$q2kR <- addZ(rows$q2kR)
-  
   dt <- merge(dt, rows[, c(3, 4, 1)], by.x = 'rch', by.y = 'q2kR', all.x = T,
-              all.y = T)
+              all.y = F)
   
   dt <- dt[order(dt$par), ]
-  
+
   dd <- merge(dd, rows[, c(3, 4, 1)], by.x = 'rch', by.y = 'q2kR', all.x = T,
-              all.y = T)
+              all.y = F)
   
-  # Remove last day (2017-07-22)
-  dd <- dd[which(dd$dte != max(dd$dte)), ]; dd <- dd[order(dd$par), ]
+  # Remove last day
+  dd <- dd[which(dd$dte != max(dd$dte, na.rm = T)), ]; dd <- dd[order(dd$par), ]
+  
+  # Tally the days and determine number of groups
+  days <- unique(dd$dte); days <- days[order(days)];
+  
+  nGrp <- ceiling(length(days) / 10); grps <- list()
+  
+  # Create the groupings
+  for (i in 1 : nGrp) {
+    if (i != nGrp) {
+      grps[[i]] <- days[(i - 1) * 10 + 1 : 10]
+    } else {
+      grps[[i]] <- days[(1 + (i - 1) * 10) : length(days)]
+    }
+  }
 
   # ________________________________________________________________________----    
   # Plot! ----
   for (i in 1 : length(unique(dt$par))) {
 
-    # Time series graphs (facet station)
+    # # Time series graphs (facet station)
     datM <- dt[which(dt$par == unique(dt$par)[i] & dt$src == 'mod'), ]
     datO <- dt[which(dt$par == unique(dt$par)[i] & dt$src == 'obs'), ]
 
@@ -408,25 +456,41 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL) {
             theme_bw() + theme(axis.title.x = element_blank()) +
             facet_wrap(. ~ rch, ncol = 2, labeller = label_both) +
             geom_point(data = datO, aes(x = tme, y = val),
-                       color = 'darkred', stroke = 1.1, shape = 5, size = 0.9)
+                       color = 'darkred', stroke = 0.6, shape = 5, size = 0.9)
 
-    ggsave(filename = paste0('ts_', pars[i, 1], '.jpg'), plot = plt1, width = 15,
+    ggsave(filename = paste0('ts_', pars[i, 1], '.png'), plot = plt1, width = 15,
            height = 10, path = nDir, units = 'in', dpi = 300)
 
     # Longitudinal graphs (facet day) x = rch, y = val, facet = dte, group = stt
+    # Plots 10 facets at a time
     ddM <- dd[which(dd$par == unique(dd$par)[i] & dd$src == 'mod'), ]
     ddO <- dd[which(dd$par == unique(dd$par)[i] & dd$src == 'obs'), ]
+    
+    for (j in 1 : nGrp) {
 
-    plt2 <- ggplot(dat = ddM, aes(x = dst, y = val, group = stt)) +
-            geom_line(color = 'darkblue', size = 1.1) +
-            ylab(paste0(pars[i, 2], ' (', pars[i, 3], ')')) +
-            theme_bw() + facet_wrap(. ~ dte, ncol = 2) +
-            geom_point(data = ddO, aes(x = dst, y = val, group = stt),
-                       color = 'darkred', stroke = 1.2, shape = 5, size = 1.1)
+      ddMB <- ddM[which(ddM$dte %in% grps[[j]]), ]
+      
+      ddMB <- dcast(ddMB[, c(2, 5 : 7)], dte + dst ~ stt, value.var = 'val')
+      
+      ddOB <- ddO[which(ddO$dte %in% grps[[j]]), ]
+            
+      plt2 <- ggplot(dat = ddMB, aes(x = dst, y = mean)) +
+              geom_line(color = 'darkblue', size = 1.1) +
+              ylab(paste0(pars[i, 2], ' (', pars[i, 3], ')')) +
+              theme_bw() + facet_wrap(.~dte, ncol = 2) +
+              geom_point(data = ddOB, aes(x = dst, y = val, group = stt),
+                         color = 'darkred', stroke = 1.2, shape = 5, size = 1.1)  +
+              geom_ribbon(aes(ymin = ddMB$min, ymax = ddMB$max), alpha = 0.2,
+                          fill = 'blue', linetype = 'blank')
 
-    ggsave(filename = paste0('long_', pars[i, 1], '.jpg'), plot = plt2, width = 15,
-           height = 10, path = nDir, units = 'in', dpi = 300)
-
+      dtes <- format(grps[[j]][c(1, length(grps[[j]]))], '%m%d')
+      
+      ggsave(filename = paste0('long_', pars[i, 1], '_', dtes[1], '_', dtes[2], '.png'),
+             plot = plt2, width = 17, height = 11, path = nDir, units = 'in',
+             dpi = 300, limitsize = F)
+      
+    }
+    
   }
 
   # ________________________________________________________________________----    
@@ -435,8 +499,184 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL) {
   
 }
 
+# WATER QUALITY CALIBRATION FUNCTIONS ----
+cal_supp_T <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
+                       wudy = NULL, adMt = NULL) {
+  
+  # functions to assess and plot measured and modeled Qual2Kw
+  # Arguments include the path to the folder with modeled output files (mOut)
+  # and observation (oOut)
+  
+  suppressMessages(library(ggplot2)); suppressMessages(library(lubridate))
+  suppressMessages(library(dplyr)); suppressMessages(library(grid))
+  suppressMessages(library(cowplot)); suppressMessages(library(ggpubr));
+  suppressMessages(library(gridExtra)); suppressMessages(library(reshape2))
+
+  # ________________________________________________________________________----    
+  # Load and organize the data ----
+  # Model data first!
+  mOut <- read_q2k_out(mOut)
+  
+  mOut <- mOut[, c( 1, 3, 4)]; names(mOut) <- c('rch', 'tme', 'tmp')
+  
+  # Remove warm-up days
+  mOut <- mOut[which(mOut$tme >= wudy), ]; mOut$tme <- mOut$tme - wudy
+  
+  # Add a leading 0 to the reaches
+  mOut$rch <- addZ(mOut$rch)
+  
+  # Time - convert from days to seconds and convert to POSIXct
+  mOut$tme <- as.POSIXct(mOut$tme * 86400, origin = strD,
+                         tz = 'America/Los_Angeles') + hours(7)
+  
+  # Observations - already formated-remove non-Temp parms and change names
+  oOut <- oOut[which(oOut$grp == 'tmp'), c(2, 1, 4)]
+
+  names(oOut) <- c('rch', 'tme', 'tmp')
+  
+  # Create a column in both for source (model/observation); bind the tables
+  mOut$src <- 'mod'; oOut$src <- 'obs'
+  
+  # Combine the observations and model outputs
+  dt <- rbind(mOut, oOut)
+  
+  # Add a leading "R" to the reaches (for cosmetic & consistency purposes only)
+  dt$rch <- paste0("R", dt$rch)
+  
+  # ________________________________________________________________________----    
+  # Calculate calibration metrics ----
+  mtrc <- temp_metrics(dt = dt)
+
+  # ________________________________________________________________________----    
+  # Prep for plotting ----
+  # Bring in station reach match with RM for plotting
+  rows <- read.csv('D:/siletz_q2k/05_calib/rhdr.csv', stringsAsFactors = F)
+
+  rows$q2kR <- paste0('R', addZ(rows$q2kR))
+
+  dt <- merge(dt, rows[, c(3, 4, 1)], by.x = 'rch', by.y = 'q2kR', all.x = T,
+              all.y = T)
+  
+  dd <- mtrc[['daily']][, c(1, 2, 5, 6)]
+  
+  dd <- melt(dd, id.vars = c('rch', 'dte'), variable.name = 'src',
+             value.name = 'T_7dadm')
+  
+  dd <- merge(dd, rows[, c(3, 4, 1)], by.x = 'rch', by.y = 'q2kR', all.x = T,
+              all.y = F)
+
+  # ________________________________________________________________________----    
+  # Plot! ----
+  # Time series graphs
+  if (!is.null(adMt)) { # If atmospheric data are specified
+    
+    mtDt <- add_met(adMt = adMt, strD = min(mOut$tme), endD = max(mOut$tme))
+    
+    mtDt <- melt(mtDt, id.vars = c('date', 'rch'), value.name = 'val',
+                 variable.name = 'par')
+    
+    for (i in 2 : length(unique(dt$rch))) { # Don't bother with HW
+      
+      tmp1 <- dt[which(dt$rch == unique(dt$rch)[i]), c(1 : 4)]
+      
+      tmp2 <- mtDt[which(mtDt$rch == unique(dt$rch)[i]), ]
+      
+      # Create the stream temperature plot
+      plt1 <- ggplot(data = tmp1[which(tmp1$src == 'mod'), ], aes(x = tme, y = tmp)) +
+              geom_line(color = 'darkblue', size = 0.9) +
+              ylab('Temperature (oC)') + scale_y_continuous(limits = c(0, 30)) +
+              theme_bw() + theme(axis.title.x = element_blank(),
+                                 plot.margin = margin(l = 0.45, unit = 'cm')) +
+              geom_point(data = tmp1[which(tmp1$src == 'obs'), ], aes(x = tme, y = tmp),
+                         color = 'darkred', size = 0.5)
+      
+      # Create the met data plot
+      plt2 <- ggplot(data = tmp2, aes(x = date, y = val)) + geom_point() +
+              theme_bw() + facet_wrap(. ~par, ncol = 1, scales = 'free')
+      
+      # Merge the two plots
+      plt3 <- grid.arrange(plt1, plt2, ncol = 1, heights = c(1, 4))
+
+      # Save as png
+      ggsave(filename = paste0(9, addZ(i - 1), '_ts_temp_', unique(dt$rch)[i], '.jpg'),
+             plot = plt3, path = nDir, width = 7.5, height = 10, dpi = 300, units = "in")
+
+    }
+
+  } else { # If atmospheric data are not specified
+    
+    # Time series graphs (facet station)
+    plt1 <- ggplot(dat = dt[which(dt$src == 'mod' & dt$rch != 'R00'), ],
+                   aes(x = tme, y = tmp)) + geom_line(color = 'darkblue', size = 0.9) +
+            ylab('Temperature (oC)') + theme_bw() + theme(axis.title.x = element_blank()) +
+            facet_wrap(. ~ rch, ncol = 2, labeller = label_both) +
+            scale_y_continuous(limits = c(5, 30), breaks = seq(0, 30, 5)) +
+            geom_point(data = dt[which(dt$src == 'obs'), ], aes(x = tme, y = tmp),
+                       color = 'darkred', stroke = 1.1, shape = 5, size = 0.5) +
+            geom_line(data = dt[which(dt$src == 'obs'), ], aes(x = tme, y = tmp),
+                      size = 0.7, color = 'darkred')
+    
+    ggsave(filename = 'TS_hourly_temp.jpg', dpi = 300, plot = plt1, width = 17,
+           height = 11, path = nDir, units = 'in')
+
+  }
+  
+  # Plot 7DADM
+  # Time series graphs (facet station)
+  plt1 <- ggplot(data = dd, aes(x = dte, y = T_7dadm, group = src, color = src)) +
+          geom_line(size = 0.9) + ylab('Temp, 7DADM (oC)') + theme_bw() +
+          scale_color_manual(values = c('darkblue', 'darkred')) +
+          scale_y_continuous(limits = c(5, 30), breaks = seq(0, 30, 5)) + 
+          theme(axis.title.x = element_blank()) + facet_wrap(. ~ rch, ncol = 2)
+  
+  ggsave(filename = 'TS_7dadm_temp.jpg', dpi = 300, plot = plt1, width = 17,
+         height = 11, path = nDir, units = 'in')
+  
+  
+  
+  # Output the metrics table
+  write.csv(x = mtrc[[1]], file = paste0(nDir, '/model_fit_stats.csv'),
+            row.names = F)
+
+}
+
 # ________________________________________________________________________----
 # SUPPLEMENTAL OUTPUT FUNCTIONS
+# READ Q2K OUTPUT ----
+read_q2k_out <- function(mOut = NULL) {
+  
+  # Function that reads 
+  
+  if (substr(mOut, nchar(mOut), nchar(mOut)) != '/') {mOut <- paste0(mOut, '/')}
+  
+  mOut <- paste0(mOut, 'dynamic_MC', c('a', 'b'), '.txt')
+  
+  # READ IN THE DATA
+  dt <- list(f1 = readLines(mOut[1]), f2 = readLines(mOut[2]))
+  
+  for (i in 1 : 2) {
+    
+    # Split into columns  
+    dt[[i]] <- data.frame(do.call("rbind", strsplit(dt[[i]], "\\s+")),
+                          stringsAsFactors = F)
+    
+    # Remove the first row and rename the columns to row 1
+    dt[[i]] <- dt[[i]][, -1]; names(dt[[i]]) <- dt[[i]][1, ]
+    
+    # Remove rows 1 & 2
+    dt[[i]] <- dt[[i]][-(1 : 2), ]
+    
+    # Make values numeric
+    dt[[i]] <- data.frame(apply(dt[[i]], MARGIN = 2, FUN = as.numeric),
+                          stringsAsFactors = F)
+  }
+  
+  # Combine into one DF and keep the necessary columns and rename
+  dt <- cbind(dt[[1]], dt[[2]])
+  
+  return(dt)
+  
+}
 
 # LOAD OBS DATA 4 Q2KW CAL (PEST OR AUTOCAL) ----
 load_obs <- function(strD = NULL, endD = NULL) {
@@ -455,7 +695,7 @@ load_obs <- function(strD = NULL, endD = NULL) {
   pth1 <- paste0('//deqhq1/tmdl/TMDL_WR/MidCoast/Models/Dissolved Oxygen/Middle',
                  '_Siletz_River_1710020405/001_data/')
   
-  d <- list(hspf = readRDS('D:/siletz/outputs/calib_20190611/rchQLC_NOx.RData'),
+  d <- list(hspf = readRDS('D:/siletz/outputs/q2k_noSTP/rchQLC_NOx.RData'),
             k600 = readRDS(paste0(pth1, 'metabolism/Metab_Output_MLE_all_wDepth.RData')),
             lswc = read.csv(paste0(pth1, 'wq_data/Monitoring 2017/LSWCD/Lincoln',
                                    '_SWCD_SILETZ RIVER_06292017-01052018/siletz',
@@ -539,7 +779,7 @@ add_weights <- function(df = NULL) {
   # Change me if the groups or the objective function group weights change    
   relWgt <- data.frame(grp = c("tmp", "doc", "phX", "rea", "nox",
                                "tpX", "toc", "bod", "cha"),
-                       rel = c(   27,    45,    18,     1,     2,
+                       rel = c(    0,    72,    18,     1,     2,
                                    2,     1,     1,     2),
                        stringsAsFactors = F) %>%
             mutate(num = rep(0, length(grp)))
@@ -619,42 +859,6 @@ addZ <- function(v) {
   
 }
 
-# READ Q2K OUTPUT ----
-read_q2k_out <- function(mOut) {
-  
-  # Function that reads 
-
-  if (substr(mOut, nchar(mOut), nchar(mOut)) != '/') {mOut <- paste0(mOut, '/')}
-  
-  mOut <- paste0(mOut, 'dynamic_MC', c('a', 'b'), '.txt')
-  
-  # READ IN THE DATA
-  dt <- list(f1 = readLines(mOut[1]), f2 = readLines(mOut[2]))
-  
-  for (i in 1 : 2) {
-    
-    # Split into columns  
-    dt[[i]] <- data.frame(do.call("rbind", strsplit(dt[[i]], "\\s+")),
-                          stringsAsFactors = F)
-    
-    # Remove the first row and rename the columns to row 1
-    dt[[i]] <- dt[[i]][, -1]; names(dt[[i]]) <- dt[[i]][1, ]
-    
-    # Remove rows 1 & 2
-    dt[[i]] <- dt[[i]][-(1 : 2), ]
-    
-    # Make values numeric
-    dt[[i]] <- data.frame(apply(dt[[i]], MARGIN = 2, FUN = as.numeric),
-                          stringsAsFactors = F)
-  }
-  
-  # Combine into one DF and keep the necessary columns and rename
-  dt <- cbind(dt[[1]], dt[[2]])
-  
-  return(dt)
-
-}
-
 # REMOVE OBS ----
 remove_obs <- function(dtes = NULL, parm = NULL, q2kR = NULL, obID = NULL) {
   
@@ -690,49 +894,6 @@ remove_obs <- function(dtes = NULL, parm = NULL, q2kR = NULL, obID = NULL) {
   obID[['obs']] <- obID[['obs']][-cond, ]
   
   return(obID)
-  
-}
-
-# CREATE OUPUT PLOTS ----
-run_plots <- function(nDir = NULL, mOut = NULL) {
-  
-  # This function creates output plots (time series and longitudinal) for most
-  # recent run an output files in the PEST folder (mOut). It creates a directory 
-  # basedon directory name variable (nDir), then outputs to that directory. 
-  # Highly customized and needs abstraction for broader use.
-  
-  nDir <- paste0('D:/siletz_q2k/06_figures', '/', nDir)
-  
-  if (dir.exists(nDir)) {
-    
-    cat('Oops! Directory already exists. Please try again.')
-    
-    break
-    
-  } else {
-    
-    dir.create(nDir)  
-    
-  }
-  
-  # RUN SUPPLEMENTAL CALIBRATION SCRIPTS ----
-  strD <- '2017-07-17'; endD <- '2017-07-22'
-  
-  obs_CW <- obs4PEST(strD, endD)
-  
-  # REMOVE OBSERVATIONS ----
-  dtes <- c('2017-07-20 15:00', '2017-07-20 16:00', '2017-07-20 17:00')
-  
-  obs_CW <- remove_obs(dtes = dtes, parm = 'phX', q2kR = '05', obID = obs_CW)
-  
-  dtes <- c('2017-07-20 17:00', '2017-07-20 18:00')
-  
-  obs_CW <- remove_obs(dtes = dtes, parm = 'phX', q2kR = '09', obID = obs_CW)
-  
-  # Reduce the data frame and plot!
-  oOut <- obs_CW[['obs']][, c(2, 3, 6, 5)]
-  
-  x <- cal_supp(strD, mOut, oOut, nDir)
   
 }
 
@@ -830,3 +991,189 @@ rating_curves <- function(df = NULL, par = NULL, file = NULL, trns = NULL) {
   return(ls)
 
 }
+
+add_met <- function(adMt = NULL, strD = NULL, endD = NULL) {
+  
+  suppressMessages(library(reshape2))
+  
+  mtPr <- c('air_temp', 'cld_covr', 'dwp_temp', 'wind_spd')
+  
+  # Search the file names of the files in dir
+  fils <- list.files(path = adMt)
+  
+  # Filter for .csv only and files with inflows_ and add_R5L6
+  mtFl <- paste0(adMt,
+                 ifelse(substr(adMt, nchar(adMt), nchar(adMt)) == '/', NULL, '/'),
+                 fils[which(substr(fils, 1, 8) %in% mtPr)])
+  
+  # Loop through each file, read data and process into output data frame
+  for (i in 1 : length(mtPr)) {
+  
+    # Read the files (.csv) into a list object
+    temp <- data.frame(t(read.csv(mtFl[i], stringsAsFactors = F)))
+
+    # Create vector of dates from row names
+    temp$date <- as.POSIXct(row.names(temp), 'X%Y.%m.%d.%H.%M.%S',
+                            tz = 'America/Los_Angeles')
+    
+    row.names(temp) <- 1 : nrow(temp)
+    
+    # Convert to long
+    temp <- melt(temp, id.vars = 'date', value.name = mtPr[i], variable.name = 'rch')
+    
+    # Replace reach name
+    temp$rch <- paste0('R',addZ(as.numeric(substr(temp$rch, 2,
+                                                  nchar(as.character(temp$rch))))))
+    
+    # Combine the all of the data frames
+    if (i == 1) {mtDt <- temp} else {mtDt <- cbind(mtDt, temp[, 3])}
+
+  }
+  
+  # Rename the columns
+  names(mtDt)[3 : 6] <- mtPr
+
+  # Trim the data frame to the specified dates
+  mtDt <- mtDt[which(mtDt$date >= strD & mtDt$date <= endD), ]
+
+  return(mtDt)
+  
+}
+
+temp_metrics <- function(dt = dt) {
+  
+  library(lubridate); library(dplyr); library(reshape2); library(hydroGOF)
+
+  # ________________________________________________________________________----
+  # Calculate 7DADM (new data frame) ----
+  dt$dte <- floor_date(dt$tme, 'day')
+  
+  # Aggregate to daily max temperature
+  dd <- dt %>% group_by(rch, dte, src) %>% summarize(Tmax = max(tmp, na.rm = T))
+  
+  # Reshape to Wide to get pair-side data. Remove dates with any NA values
+  dd <- dcast(dd, rch + dte ~ src, value.var = 'Tmax'); dd <- dd[complete.cases(dd), ]
+  
+  # Calculate the 7DADM
+  rch <- unique(dd$rch)
+  
+  # Initialize the columns of the 7DADM
+  dd$o7dadm <- dd$m7dadm <- 0
+
+  for (i in 1 : length(rch)) {
+      
+    cond <- which(dd$rch == rch[i])
+
+    for (j in 3 : 4) {
+      dd[cond, j + 2] <- stats::filter(dd[cond, j], rep(1 / 7, 7), sides = 1)  
+    }
+    
+  }
+  
+  # Remove all NAs
+  dd <- dd[complete.cases(dd), ]  
+  
+  # ________________________________________________________________________----
+  # Process hourly data - condense model output to hourly ----
+  dt <- dt %>% arrange(rch, tme)
+  
+  temp <- dt[which(dt$src == 'mod'), ]
+  
+  temp$indx <- 1 : nrow(temp)
+  
+  temp$hour <- round_date(temp$tme, 'hour')
+  
+  temp$diff <- abs(temp$hour - temp$tme)  
+  
+  rch <- unique(dt$rch)
+  
+  hrvc <- NULL
+  
+  for (i in 1 : length(rch)) {
+    
+    tmp1 <- temp[which(temp$rch == rch[i]), ]; hrs <- unique(temp$hour)
+    
+    for (j in 1 : length(hrs)) {
+      
+      tmp2 <- tmp1[which(tmp1$hour == hrs[j]), ]
+      
+      hrvc <- append(hrvc, tmp2[which.min(tmp2$diff), 6])
+      
+    }
+  }
+
+  temp <- temp[hrvc, c(1, 7, 3 : 5)]; names(temp)[2] <- 'tme'
+  
+  dt <- rbind(temp, dt[which(dt$src == 'obs'), ])
+  
+  dt <- dcast(dt[, 1 : 4], rch + tme ~ src, value.var = 'tmp')
+  
+  dt <- dt[complete.cases(dt), ]; names(dt)[2] <- 'dte'
+  
+  rch <- unique(dt$rch)
+  
+  # Calculate Statistics ----
+  # Initiate the data frame to house the statistics
+  mtrc <- data.frame(rch = rch, stringsAsFactors = F) %>%
+          mutate(n_7d = 0, me_7d = 0, mae_7d = 0, rmse_7d = 0,
+                 n_hr = 0, me_hr = 0, mae_hr = 0, rmse_hr = 0, nse_hr = 0)
+  
+  for (i in 1 : length(rch)) {
+    
+    tmp1 <- dt[which(dt$rch == rch[i]), ]; tmp2 <- dd[which(dd$rch == rch[i]), ]
+    
+    # Count
+    mtrc[i, 2] <- nrow(tmp2); mtrc[i, 6] <- nrow(tmp1)    
+    
+    # Mean error
+    mtrc[i, 3] <- me(tmp2$m7dadm, tmp2$o7dadm)   # 7DADM
+    mtrc[i, 7] <- me(tmp1$mod, tmp1$obs)         # Hourly
+    
+    # Mean absolute error
+    mtrc[i, 4] <- mae(tmp2$m7dadm, tmp2$o7dadm)  # 7DADM
+    mtrc[i, 8] <- mae(tmp1$mod, tmp1$obs)        # Hourly
+    
+    # Root mean square error
+    mtrc[i, 5] <- rmse(tmp2$m7dadm, tmp2$o7dadm) # 7DADM
+    mtrc[i, 9] <- rmse(tmp1$mod, tmp1$obs)       # Hourly
+    
+    # Nash-sutcliffe efficiency
+    mtrc[i, 10] <- NSE(tmp1$mod, tmp1$obs, FUN = NULL) # Hourly
+
+  }
+  
+  # Create and format the output object (list of stats df and data dfs)
+  out <- list(metrics = mtrc,
+              daily   = dd,
+              hourly  = dt)
+  
+  # Add rows for reaches with no obs data
+  for (i in 1 : length(out)) {
+
+    adDf <- data.frame(rch = c('R01', 'R09'),
+                       matrix(data = NA, nrow = 2, ncol = length(out[[i]]) - 1),
+                       stringsAsFactors = F); names(adDf) <- names(out[[i]])
+    
+    out[[i]] <- rbind(out[[i]], adDf)
+    
+    if (i == 1) {
+      out[[i]] <- out[[i]] %>% arrange(rch)
+    } else {
+      out[[i]] <- out[[i]] %>% arrange(rch, dte)
+    }
+    
+  }
+
+  return(out)
+
+}
+
+# REMOVE OBSERVATIONS (pH only) ----
+# dtes <- c('2017-07-20 15:00', '2017-07-20 16:00', '2017-07-20 17:00')
+# 
+# obs_CW <- remove_obs(dtes = dtes, parm = 'phX', q2kR = '05', obID = obs_CW)
+# 
+# dtes <- c('2017-07-20 17:00', '2017-07-20 18:00')
+# 
+# obs_CW <- remove_obs(dtes = dtes, parm = 'phX', q2kR = '09', obID = obs_CW)
+

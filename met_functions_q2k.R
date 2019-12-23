@@ -5,7 +5,7 @@
 # __________________________________________________________________________----
 # Temperature - Dry Bulb ----
 t_air_q2k <- function(strD = NULL, endD = NULL, shp = NULL, dir = NULL,
-                      tmxt = NULL, tmnt = NULL) {
+                      tmxt = NULL, tmnt = NULL, nday = NULL) {
   
   # Function to create an hourly time series of air temperature data for each
   # Qual-2Kw reach using gridded daily PRISM max/min air temperature data
@@ -117,6 +117,9 @@ t_air_q2k <- function(strD = NULL, endD = NULL, shp = NULL, dir = NULL,
   # Remove the indirect input columns
   airT <- airT[, c(1, 4, 7, 8, 9, 12, 13, 14, 15, 16, 17)]
   
+  # Add warm up days if nday = real number
+  if (!is.null(nday)) {airT <- add_warm_up(df = airT, nday = nday)}
+  
   row.names(airT) <- airT$date; airT <- airT[, -1]; airT <- data.frame(t(airT))
   
   return(airT)
@@ -126,7 +129,8 @@ t_air_q2k <- function(strD = NULL, endD = NULL, shp = NULL, dir = NULL,
 # __________________________________________________________________________----
 # Temperature - Dew Point ----
 t_dwpnt_q2k <- function(dpts = NULL, strD = NULL, endD = NULL, shp = NULL,
-                        dir = NULL, tmxt = NULL, tmnt = NULL) {
+                        dir = NULL, tmxt = NULL, tmnt = NULL, nday = NULL,
+                        airT = NULL) {
   
   # Function to create an hourly time series of dewpoint temperature data 4 each
   # Qual-2Kw reach using gridded daily PRISM mean dewpoint temperature data
@@ -139,6 +143,8 @@ t_dwpnt_q2k <- function(dpts = NULL, strD = NULL, endD = NULL, shp = NULL,
   # dir = directory of the prism data
   # tmxt = vector of time of maximum dewpoint temperature (using minmax_time())
   # tmnt = vector of time of minimum dewpoint temperature (using minmax_time())
+  # Number of warm up days (nday) with repeating day one in front of the real data
+  # Air temp -> Data frame of concurrent air temp to ensure dwpT <= airT
 
   library(raster); library(dplyr)
   
@@ -209,7 +215,17 @@ t_dwpnt_q2k <- function(dpts = NULL, strD = NULL, endD = NULL, shp = NULL,
   # Remove indirect input columns and transpose
   dwpT <- dwpT[, c(1, 4, 7, 8, 9, 12, 13, 14, 15, 16, 17)]
   
+  # Add warm up days if nday = real number
+  if (!is.null(nday)) {dwpT <- add_warm_up(df = dwpT, nday = nday)}
+  
   row.names(dwpT) <- dwpT$date; dwpT <- dwpT[, -1]; dwpT <- data.frame(t(dwpT))
+  
+  # Check the dewpoint T >= air T. Set equal to air T if greater than.
+  for (i in 1 : length(dwpT)) {
+    
+    dwpT[, i] <- ifelse(dwpT[, i] < airT[, i], dwpT[, i], airT[, i])
+    
+  }
   
   return(dwpT)
   
@@ -217,7 +233,7 @@ t_dwpnt_q2k <- function(dpts = NULL, strD = NULL, endD = NULL, shp = NULL,
 
 # __________________________________________________________________________----
 # Cloud Cover ----
-cloud_q2k <- function(x = NULL, strD = NULL, endD = NULL) {
+cloud_q2k <- function(x = NULL, strD = NULL, endD = NULL, nday = NULL) {
   
   # This function interrogates hardwired met data file and returns cloud
   # cover (fraction - 0 = clear, 1 = totally cloudy)
@@ -232,6 +248,9 @@ cloud_q2k <- function(x = NULL, strD = NULL, endD = NULL) {
                      B13  = mDat$sky_nwp / 8, B14  = mDat$sky_nwp / 8,
                      B15  = mDat$sky_nwp / 8, B16  = mDat$sky_nwp / 8)
   
+  # Add warm up days if nday = real number
+  if (!is.null(nday)) {mDat <- add_warm_up(df = mDat, nday = nday)}
+  
   # Transpose and set col names to row 1
   row.names(mDat) <- mDat$date; mDat <- mDat[, -1]; mDat <- data.frame(t(mDat))
 
@@ -241,7 +260,7 @@ cloud_q2k <- function(x = NULL, strD = NULL, endD = NULL) {
 
 # __________________________________________________________________________----
 # Wind Speed ----
-wind_q2k <- function(x = NULL, strD = NULL, endD = NULL) {
+wind_q2k <- function(x = NULL, strD = NULL, endD = NULL, nday = NULL) {
   
   # This function interrogates hardwired met data file and returns wind speed
   dtes <- as.POSIXct(c(strD, endD), '%Y-%m-%d', tz = 'America/Los_Angeles')
@@ -255,6 +274,9 @@ wind_q2k <- function(x = NULL, strD = NULL, endD = NULL) {
                      B13  = mDat$usp_nwp, B14  = mDat$usp_nwp,
                      B15  = mDat$usp_nwp, B16  = mDat$usp_nwp)
   
+  # Add warm up days if nday = real number
+  if (!is.null(nday)) {mDat <- add_warm_up(df = mDat, nday = nday)}
+  
   # Transpose and set col names to row 1
   row.names(mDat) <- mDat$date; mDat <- mDat[, -1]; mDat <- data.frame(t(mDat))
   
@@ -264,7 +286,7 @@ wind_q2k <- function(x = NULL, strD = NULL, endD = NULL) {
 
 # __________________________________________________________________________----
 # Direct Solar Radiation ----
-solar_q2k <- function(strD = NULL, endD = NULL) {
+solar_q2k <- function(strD = NULL, endD = NULL, nday = NULL) {
 
   source('C:/Users/rshojin/Desktop/006_scripts/github/Met_Functions/solar2par.R')
   
@@ -293,6 +315,9 @@ solar_q2k <- function(strD = NULL, endD = NULL) {
     solr[, i + 1] <- tmp$solar
     
   }
+  
+  # Add warm up days if nday = real number
+  if (!is.null(nday)) {solr <- add_warm_up(df = solr, nday = nday)}
   
   row.names(solr) <- solr$date; solr <- solr[, -1]; solr <- data.frame(t(solr))
 
@@ -375,3 +400,23 @@ plot_temps <- function(df = NULL) {
   
 }
 
+add_warm_up <- function(df = NULL, nday = NULL) {
+  
+  # Rename the dates column for consistency
+  names(df)[1] <- 'date'
+  
+  # Chunk out the first day
+  temp <- df[1 : 24, ]
+  
+  # Create the data frame of repeating first days
+  for (i in 1 : (nday - 1)) {temp <- rbind(temp, df[1 : 24, ])}
+  
+  df <- rbind(temp, df)
+  
+  # Recalculate the date/times of each data-frame
+  df$date <- seq(df$date[1] - nday * 86400, df$date[nrow(df)], 3600)
+  
+  return(df)
+  
+  
+}

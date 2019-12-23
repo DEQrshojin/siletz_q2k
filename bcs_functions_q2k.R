@@ -488,10 +488,14 @@ write_bcs_q2k <- function(cOut = NULL, oPth = NULL, sveRDS = NULL,
   
   # Make Inflow Boundary Conditions 
   inBC <- cOut[[1]]; inBC$Reach <- 0; inBC <- inBC[which(1 == 0), ]
-  
+
   for (i in 2 : (length(cOut) - 2)) {
+  
+    # Make basin names (numbers as leading column of the BC output  
+    # cOut[[i]]$Reach <- as.numeric(gsub('B', '', names(cOut)[i]))
     
-    cOut[[i]]$Reach <- as.numeric(gsub('B', '', names(cOut)[i]))
+    # Make reach names (numbers) as leading column of the BC output
+    cOut[[i]]$Reach <- i - 1
     
     inBC <- rbind(inBC, cOut[[i]])
     
@@ -521,6 +525,7 @@ write_bcs_q2k <- function(cOut = NULL, oPth = NULL, sveRDS = NULL,
   if (!is.null(sveRDS)) {
     saveRDS(object = cOut, file = paste0(oPth, sveRDS, '.RData'))
   }
+  
 }
 
 # __________________________________________________________________________----
@@ -660,6 +665,9 @@ stp_bcs <- function(cOut = NULL, stp = NULL, q2kR = NULL, csvOut = NULL) {
                   mxWQ$qIn_cms
     
   }
+  
+  # Add Q2K reach diversion back in (cause we deleted them up above)
+  mxWQ[, 2] <- cOut[[q2kR + 1]][, 2]
   
   cOut[[q2kR + 1]] <- mxWQ
 
@@ -863,5 +871,31 @@ do_sat <- function(temp = NULL, elev = NULL) {
            (1 - 0.02255 * elev * 0.0003048)^5.256
   
   return(doSat)
+
+}
+
+add_warm_up <- function(cOut = NULL, nday = NULL) {
+  
+  # This function adds a warm up period of a specified number of days (nday)
+  # to the boundary condition object
+
+  # Loop through each bc; add first day of bcs df to the front of the df
+  for (i in 1 : (length(cOut) - 1)) {
+    
+    temp <- cOut[[i]][1 : 24, ]
+    
+    # Create the data frame of repeating first days
+    for (j in 1 : (nday - 1)) {temp <- rbind(temp, cOut[[i]][1 : 24, ])}
+    
+    cOut[[i]] <- rbind(temp, cOut[[i]])
+    
+    # Recalculate the date/times of each data-frame
+    cOut[[i]]$date <- seq(cOut[[i]]$date[1] - nday * 86400,
+                          cOut[[i]]$date[nrow(cOut[[i]])],
+                          3600)
+
+  }
+  
+  return(cOut)
 
 }

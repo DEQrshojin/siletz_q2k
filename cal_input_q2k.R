@@ -1,6 +1,10 @@
+rm(list = ls())
+
+source('d:/siletz_q2k/04_scripts/cal_functions_q2k.R')
+
 # ________________________________________________________________________----
 # PROCESS OBSERVATIONS FOR PEST ----
-strD <- '2017-07-17'; endD <- '2017-07-22'
+strD <- '2017-07-07'; endD <- '2017-08-29'
 
 obs_CW <- obs4PEST(strD, endD)
 
@@ -18,34 +22,53 @@ obs_CW <- remove_obs(dtes = dtes, parm = 'phX', q2kR = '09', obID = obs_CW)
 # OUTPUT OBSERVATIONS LIST FOR CONTROL (.PST) FILE ----
 df <- add_weights(obs_CW[["obs"]])
 
-fOut <- 'd:/siletz_q2k/08_pest/05_supp/obs_jul2017.txt'
+df <- df[which(df$grp != 'tmp'), ]
 
-df <- output_obs(df = df, fOut = fOut)
+fOut <- 'd:/siletz_q2k/08_pest/05_supp/obs_cw2017.txt'
+
+output_obs(df = df, fOut = fOut)
 
 # ________________________________________________________________________----
 # OUTPUT INSTRUCTION (.INS) FILE ----
-obID <- obs_CW[["obs"]]$obID
+obID <- obs_CW[["obs"]][which(obs_CW[["obs"]]$grp != 'tmp'), 1]
 
-iOut <- 'd:/siletz_q2k/08_pest/siletz_CW.ins'
+iOut <- 'd:/siletz_q2k/08_pest/03_wq/slz_q2k_wq.ins'
 
 ins4PEST(obID = obID, iOut = iOut)
 
 # ________________________________________________________________________----
 # OUTPUT MODEL OUTPUT (.OUT) FILE ----
-obID <- obs_CW[["obs"]]$obID
+obID <- obs_CW[["obs"]][which(obs_CW[["obs"]]$grp != 'tmp'), 1]
 
-mOut <- 'd:/siletz_q2k/08_pest/01_hydr'
+mOut <- 'd:/siletz_q2k/08_pest/03_wq'
 
-fOut <- 'd:/siletz_q2k/08_pest/01_hydr/slz_q2k_H.out'
+fOut <- 'd:/siletz_q2k/08_pest/03_wq/slz_q2k_wq.out'
 
-x <- mod4PEST(mOut, obID, strD, fOut)
+x <- mod4PEST(mOut = mOut, obID = obID, strD = strD, fOut = fOut, wudy = 21)
 
 # ________________________________________________________________________----
 # RUN SUPPLEMENTAL CALIBRATION SCRIPTS ----
-strD <- '2017-07-17'; endD <- '2017-07-22'
+# For temperature
+rm(list=ls())
 
-# mOut <- '//deqhq1/rshojin/siletz_q2k/03_output'
-mOut <- 'D:/siletz_q2k/01_models/CW/20190930'
+source('d:/siletz_q2k/04_scripts/cal_functions_q2k.R')
+
+strD = '2017-07-07'; endD = '2017-08-29'; i = 1; wudy = 21
+
+# adMt <- 'D:/siletz_q2k/02_input/ext_temp_0707_0829'
+
+mOut = 'D:/siletz_q2k/08_pest/06_test'
+
+nDir = paste0('test_', 1)
+
+run_plots(nDir = paste0('test_', 1),                # Name of new directory for figures
+          mOut = 'D:/siletz_q2k/08_pest/06_test',   # Directory of Q2K output
+          wudy = 21,                                # Specify number of warm-up days
+          strD = '2017-07-07', endD = '2017-08-28', # Start/end of parameterization period
+          adMt = NULL)                              # Add meteorological data to timeseries plots
+                                                    # Add met not available for WQ plots, just temp
+
+mOut <- 'D:/siletz_q2k/08_pest/02_temp'
 
 oOut <- obs_CW[['obs']][, c(2, 3, 6, 5)]
 
@@ -53,14 +76,13 @@ x <- cal_supp(strD, mOut, oOut, nDir)
 
 # ________________________________________________________________________----
 # CALCULATE RATING CURVES ----
-
-# The Heat Source hydraulic data were extracted from the Heat Source 2004
-# Current Conditions model, using the 'get_stream_width.R' script in the C drive.
-# See that script for Heat Source prediction location
 rm(list=ls())
 
 source('d:/siletz_q2k/04_scripts/cal_functions_q2k.R')
 
+# The Heat Source hydraulic data were extracted from the Heat Source 2004
+# Current Conditions model, using the 'get_stream_width.R' script in the C drive.
+# See that script for Heat Source prediction location
 hyHS <- readRDS("D:/siletz_q2k/02_input/HS_hydraulics_2004.RData")
 
 path <- 'D:/siletz_q2k/06_figures/h_cal/'
@@ -68,6 +90,10 @@ path <- 'D:/siletz_q2k/06_figures/h_cal/'
 vlrc <- list(); wdrc <- list()
 
 trns <- 'LL'
+
+expn <- 40
+
+sffx <- 'plus40'
 
 for (i in 1 : length(hyHS)) {
 
@@ -81,10 +107,13 @@ for (i in 1 : length(hyHS)) {
   names(vlrc)[i] <- names(hyHS)[i]
 
   tmp2 <- hyHS[[i]][, c(3, 5)] # depth = 2, flow = 3, veloc = 4, width = 5
+  
+  # Expand/contract width by factor
+  tmp2$wdth <- tmp2$wdth + tmp2$wdth * expn / 100
 
-  wdrc[[i]] <- rating_curves(df = tmp2, par = 'Width', trns = trns)
-                             # file = paste0(path, 'wdt_rc_', trns, '_',
-                             #               names(hyHS)[i], '.png'))
+  wdrc[[i]] <- rating_curves(df = tmp2, par = 'Width', trns = trns,
+                             file = paste0(path, 'wdt_rc_', trns, '_',
+                                           names(hyHS)[i], '_', sffx, '.png'))
 
   names(wdrc)[i] <- names(hyHS)[i]
   
@@ -96,44 +125,21 @@ rc <- list(velocity = vlrc, width = wdrc)
 
 # rc <- vlrc
 
-saveRDS(object = rc, file = 'D:/siletz_q2k/02_input/HS_rating_curves.RData')
+saveRDS(object = rc, file = 'D:/siletz_q2k/02_input/HS_rating_curves_plus40.RData')
 
 # Output to a csv to import into Qual2Kw
 df <- data.frame(rch = 0, b_v = 0, a_v = 0, b_w = 0, a_w = 0, stringsAsFactors = F)
 
 for (i in 1 : 10) {
 
-  df <- rbind(df,
-              c(rch = names(rc[[1]])[i],
-                b_v = 10^rc[["velocity"]][[i]][["coef"]][2],
-                a_v = rc[["velocity"]][[i]][["coef"]][1],
-                b_w = 10^rc[["width"]][[i]][["coef"]][2],
-                a_w = rc[["velocity"]][[i]][["coef"]][1]))
-    
+  df <- rbind(df, c(rch = names(rc[[1]])[i],
+                    b_v = 10^rc[["velocity"]][[i]][["coef"]][2],
+                    a_v = rc[["velocity"]][[i]][["coef"]][1],
+                    b_w = 10^rc[["width"]][[i]][["coef"]][2],
+                    a_w = rc[["velocity"]][[i]][["coef"]][1]))
+
 }
 
 df <- df[-1, ] 
 
-write.csv(df, file = 'D:/siletz_q2k/02_input/rating_curve_coefficients.csv')
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+write.csv(df, file = 'D:/siletz_q2k/02_input/rating_curve_coefficients_plus40pct.csv')
