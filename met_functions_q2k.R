@@ -28,7 +28,7 @@ t_air_q2k <- function(strD = NULL, endD = NULL, shp = NULL, dir = NULL,
               as.POSIXct(endD, '%Y-%m-%d', tz = 'America/Los_Angeles'), 86400)
   
   # List the folders and files for min/max T
-  if (substr(dir, nchar(dir), nchar(dir)) != '/') {paste0(dir, '/')}
+  if (substr(dir, nchar(dir), nchar(dir)) != '/') {dir <- paste0(dir, '/')}
   
   # List grids for interrogation
   rfmn <- paste0(dir, 'tmin/Oregon_tmin_', format(dtes, '%Y%m%d'), '.asc')
@@ -119,6 +119,12 @@ t_air_q2k <- function(strD = NULL, endD = NULL, shp = NULL, dir = NULL,
   
   # Add warm up days if nday = real number
   if (!is.null(nday)) {airT <- add_warm_up(df = airT, nday = nday)}
+  
+  # Remove duplicate datetimes
+  airT <- change_dups(airT)
+  
+  # Fill NAs
+  airT <- airT %>% fill(everything())
   
   row.names(airT) <- airT$date; airT <- airT[, -1]; airT <- data.frame(t(airT))
   
@@ -218,6 +224,13 @@ t_dwpnt_q2k <- function(dpts = NULL, strD = NULL, endD = NULL, shp = NULL,
   # Add warm up days if nday = real number
   if (!is.null(nday)) {dwpT <- add_warm_up(df = dwpT, nday = nday)}
   
+  # Remove duplicate datetimes
+  dwpT <- change_dups(dwpT)
+  
+  for (i in 2 : length(dwpT)) {dwpT[which(is.nan(dwpT[, i])), i] <- NA} 
+  
+  dwpT <- dwpT %>% fill(everything())
+  
   row.names(dwpT) <- dwpT$date; dwpT <- dwpT[, -1]; dwpT <- data.frame(t(dwpT))
   
   # Check the dewpoint T >= air T. Set equal to air T if greater than.
@@ -235,6 +248,8 @@ t_dwpnt_q2k <- function(dpts = NULL, strD = NULL, endD = NULL, shp = NULL,
 # Cloud Cover ----
 cloud_q2k <- function(x = NULL, strD = NULL, endD = NULL, nday = NULL) {
   
+  library(dplyr)
+  
   # This function interrogates hardwired met data file and returns cloud
   # cover (fraction - 0 = clear, 1 = totally cloudy)
   dtes <- as.POSIXct(c(strD, endD), '%Y-%m-%d', tz = 'America/Los_Angeles')
@@ -251,6 +266,14 @@ cloud_q2k <- function(x = NULL, strD = NULL, endD = NULL, nday = NULL) {
   # Add warm up days if nday = real number
   if (!is.null(nday)) {mDat <- add_warm_up(df = mDat, nday = nday)}
   
+  # Remove duplicate rows
+  mDat <- change_dups(mDat)
+  
+  # Fill NAs
+  for (i in 2 : length(mDat)) {mDat[which(is.nan(mDat[, i])), i] <- NA} 
+  
+  mDat <- mDat %>% fill(everything())
+  
   # Transpose and set col names to row 1
   row.names(mDat) <- mDat$date; mDat <- mDat[, -1]; mDat <- data.frame(t(mDat))
 
@@ -260,7 +283,8 @@ cloud_q2k <- function(x = NULL, strD = NULL, endD = NULL, nday = NULL) {
 
 # __________________________________________________________________________----
 # Wind Speed ----
-wind_q2k <- function(x = NULL, strD = NULL, endD = NULL, nday = NULL) {
+wind_q2k <- function(x = NULL, strD = NULL, endD = NULL, nday = NULL,
+                     mdfr = NULL) {
   
   # This function interrogates hardwired met data file and returns wind speed
   dtes <- as.POSIXct(c(strD, endD), '%Y-%m-%d', tz = 'America/Los_Angeles')
@@ -277,9 +301,21 @@ wind_q2k <- function(x = NULL, strD = NULL, endD = NULL, nday = NULL) {
   # Add warm up days if nday = real number
   if (!is.null(nday)) {mDat <- add_warm_up(df = mDat, nday = nday)}
   
+  # Remove duplicate datetimes
+  mDat <- change_dups(mDat)
+  
+  # fill NAs
+  for (i in 2 : length(mDat)) {mDat[which(is.nan(mDat[, i])), i] <- NA} 
+  
+  mDat <- mDat %>% fill(everything())
+
+  if (!is.null(mdfr)) {for (i in 2 : length(mDat)) {
+      mDat[, i] <- mDat[, i] * mdfr[i - 1] / 100
+  }}
+
   # Transpose and set col names to row 1
   row.names(mDat) <- mDat$date; mDat <- mDat[, -1]; mDat <- data.frame(t(mDat))
-  
+
   return(mDat)
 
 }  
@@ -318,6 +354,9 @@ solar_q2k <- function(strD = NULL, endD = NULL, nday = NULL) {
   
   # Add warm up days if nday = real number
   if (!is.null(nday)) {solr <- add_warm_up(df = solr, nday = nday)}
+  
+  # Remove duplicate datetimes
+  solr <- remove_dups(solr)
   
   row.names(solr) <- solr$date; solr <- solr[, -1]; solr <- data.frame(t(solr))
 
@@ -417,6 +456,20 @@ add_warm_up <- function(df = NULL, nday = NULL) {
   df$date <- seq(df$date[1] - nday * 86400, df$date[nrow(df)], 3600)
   
   return(df)
+
+}
+
+change_dups <- function(df = NULL) {
   
+  library(dplyr)
+
+  df$dchar <- as.character(df$date)
   
+  # Add 30 minutes to this time step, to keep it but not duplicate the time.
+  df[which(duplicated(df$dchar)), 1] <- df[which(duplicated(df$dchar)), 1] + (60 * 30)
+  
+  df <- df[, -length(df)]
+
+  return(df)
+
 }

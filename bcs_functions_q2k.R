@@ -38,18 +38,18 @@ hspf_q2k <- function(cOut = NULL, strD = NULL, endD = NULL, dir = NULL) {
                to = c(TKN = 8, NH3 = 9, NOx = 10, TP = 11, PO4 = 12, OrC = 14))
   
   # Create a list of the basins from which to pull either lateral or reach data
-  cBas <- list(HW = list(L = c(1, 2), R = NULL), # Lat from B1 & B2
-               B03 = list(L = 3, R = NULL),      # Lat from B3
-               B06 = list(L = 6, R = 5),         # Lat from B6 and Rch from B5 
-               B07 = list(L = 7, R = NULL),      # Lat from B7
-               B08 = list(L = 8, R = 10),        # Lat from B8 and Rch from B10
-               B11 = list(L = 11, R = NULL),     # Lat from B11
-               B12 = list(L = 12, R = NULL),     # Lat from B12
-               B13 = list(L = 13, R = NULL),     # Lat from B13
-               B14 = list(L = 14, R = NULL),     # Lat from B14
-               B15 = list(L = 15, R = NULL),     # Lat from B15
-               B16 = list(L = 16, R = NULL),     # Lat from B16
-               TW = list(L = NULL, R = 16))      # Rch from B16
+  cBas <- list(HW  = list(L = c(1, 2), R = NULL), # Lat from B1 & B2
+               B03 = list(L = 3, R = NULL),       # Lat from B3
+               B06 = list(L = 6, R = 5),          # Lat from B6 and Rch from B5 
+               B07 = list(L = 7, R = NULL),       # Lat from B7
+               B08 = list(L = 8, R = 10),         # Lat from B8 and Rch from B10
+               B11 = list(L = 11, R = NULL),      # Lat from B11
+               B12 = list(L = 12, R = NULL),      # Lat from B12
+               B13 = list(L = 13, R = NULL),      # Lat from B13
+               B14 = list(L = 14, R = NULL),      # Lat from B14
+               B15 = list(L = 15, R = NULL),      # Lat from B15
+               B16 = list(L = 16, R = NULL),      # Lat from B16
+               TW  = list(L = NULL, R = 16))      # Rch from B16
   
   # Create a vector of column # where specific constituent data should go
   cPut <- c(Q = 2, TKN = 9, NH3 = 10, NOx = 11, TP = 12, PO4 = 13, OrC = 15)
@@ -803,17 +803,18 @@ summarize_DMR <- function(stp = stp) {
   # Tack on a month column
   stp$mnth <- lubridate::month(stp$DATE)
   
-  # Aggregate to monthly values; effluent data starts at column 7
+  # Aggregate to mean monthly values; effluent data starts at column 7
   stpM <- stp[, c(7 : length(stp))] %>% group_by(mnth) %>%
           summarise(tmp_e = mean(Temp_E, na.rm = T),
                     pH_e  = mean(pH_E, na.rm = T),
                     q_e   = mean(Q_E, na.rm = T),
                     bod_e = mean(CBOD_E, na.rm = T),
+                    # bod_e = max(CBOD_E, na.rm = T),
                     tss_e = mean(TSS_E, na.rm = T),
                     tur_e = mean(Turbidity, na.rm = T),
                     nh3_e = mean(NH3, na.rm = T),
                     alk_e = mean(Alkalinity, na.rm = T))
- 
+
   # Deal with alk which has several NaNs incl. July set to global mean
   stpM$alk_e <- mean(stp$Alkalinity, na.rm = T)
   
@@ -899,3 +900,4 @@ add_warm_up <- function(cOut = NULL, nday = NULL) {
   return(cOut)
 
 }
+

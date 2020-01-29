@@ -1,14 +1,8 @@
-rm(list = ls())
-
 library(lubridate)
 
-# sapply(c("D:/siletz_q2k/04_scripts/bcs_functions_q2k.R",
-#          "D:/siletz_q2k/04_scripts/bcs_functions_q2k_ss.R"), source)
+rm(list = ls()); cat('\014')
 
 source("D:/siletz_q2k/04_scripts/bcs_functions_q2k.R")
-
-# Load data?
-# cOut <- readRDS("D:/siletz_q2k/02_input/BC_inputs_jul2017_w_dvs.RData")
 
 # Cold-water period
 strD <- '2017-07-07'; endD <- '2017-08-29'
@@ -16,7 +10,7 @@ strD <- '2017-07-07'; endD <- '2017-08-29'
 # Spawning period
 # strD <- '2017-09-08'; endD <- '2017-10-16'
 
-oDir <- 'D:/siletz_q2k/02_input/wq_cw_0707_0829' # Output director for csv files
+oDir <- 'D:/siletz_q2k/02_input/wq_cw_69_maxBOD' # Output director for csv files
 
 iDir <- 'D:/siletz/outputs/q2k_noSTP' # Input HSPF data directory
 
@@ -68,11 +62,15 @@ cOut <- stp_bcs(cOut = cOut, stp = stp, q2kR = 7, csvOut = NULL)
 
 # __________________________________________________________________________----
 # ADD WARM-UP DAYS ----
-cOut <- add_warm_up(cOut = cOut, nday = 21)
+cOut <- add_warm_up(cOut = cOut, nday = NULL)
+
+# __________________________________________________________________________----
+# FILL IN NAs ----
+for (i in 1 : length(cOut)) {cOut[[i]] <- cOut[[i]] %>% fill(everything())}
 
 # __________________________________________________________________________----
 # WRITE BCs TO CSV ----
-addSfx <- 'cw_wq'; saveRDS <- 'cw_wq'
+addSfx <- 'cw_maxBOD'; saveRDS <- 'cw_maxBOD'
 
 write_bcs_q2k(cOut = cOut, oPth = oDir, sveRDS = saveRDS, addSfx = addSfx)
 

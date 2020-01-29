@@ -1,12 +1,14 @@
-rm(list = ls())
+rm(list = ls()); cat('\014')
 
 source('d:/siletz_q2k/04_scripts/cal_functions_q2k.R')
 
 # ________________________________________________________________________----
 # PROCESS OBSERVATIONS FOR PEST ----
-strD <- '2017-07-07'; endD <- '2017-08-29'
+strD <- '2016-09-10'; endD <- '2017-02-13'
 
-obs_CW <- obs4PEST(strD, endD)
+HSPF <- 'D:/siletz/outputs/q2k_noSTP'
+
+obs_CW <- obs4PEST(strD, endD, HSPF = HSPF)
 
 # ________________________________________________________________________----
 # REMOVE OBSERVATIONS ----
@@ -24,7 +26,7 @@ df <- add_weights(obs_CW[["obs"]])
 
 df <- df[which(df$grp != 'tmp'), ]
 
-fOut <- 'd:/siletz_q2k/08_pest/05_supp/obs_cw2017.txt'
+fOut <- 'd:/siletz_q2k/08_pest/05_supp/obs_cw2017_hspf.txt'
 
 output_obs(df = df, fOut = fOut)
 
@@ -49,24 +51,26 @@ x <- mod4PEST(mOut = mOut, obID = obID, strD = strD, fOut = fOut, wudy = 21)
 # ________________________________________________________________________----
 # RUN SUPPLEMENTAL CALIBRATION SCRIPTS ----
 # For temperature
-rm(list=ls())
+rm(list=ls()); cat("\014")
 
 source('d:/siletz_q2k/04_scripts/cal_functions_q2k.R')
 
-strD = '2017-07-07'; endD = '2017-08-29'; i = 1; wudy = 21
+strD = '2017-07-07'; endD = '2017-08-28'; i = 1; wudy = NULL
 
 # adMt <- 'D:/siletz_q2k/02_input/ext_temp_0707_0829'
 
-mOut = 'D:/siletz_q2k/08_pest/06_test'
+mOut = 'D:/siletz_q2k/08_pest/03_wq'
 
-nDir = paste0('test_', 1)
+nDir = 'wq_14'
 
-run_plots(nDir = paste0('test_', 1),                # Name of new directory for figures
-          mOut = 'D:/siletz_q2k/08_pest/06_test',   # Directory of Q2K output
+HSPF = 'D:/siletz/outputs/q2k_noSTP'
+
+run_plots(nDir = paste0('test_', 2),                # Name of new directory for figures
+          mOut = 'D:/siletz_q2k/08_pest/03_wq',   # Directory of Q2K output
           wudy = 21,                                # Specify number of warm-up days
           strD = '2017-07-07', endD = '2017-08-28', # Start/end of parameterization period
-          adMt = NULL)                              # Add meteorological data to timeseries plots
-                                                    # Add met not available for WQ plots, just temp
+          adMt = NULL,                              # Add met data to ts plots
+          HSPF = 'D:/siletz/outputs/q2k_noSTP')     # HSPF calibration set
 
 mOut <- 'D:/siletz_q2k/08_pest/02_temp'
 

@@ -2,7 +2,7 @@
 # CORE OUTPUT FUNCTIONS
 
 # CREATE PEST OBS OBJECT ----
-obs4PEST <- function(strD = NULL, endD = NULL) {
+obs4PEST <- function(strD = NULL, endD = NULL, HSPF = NULL) {
   
   # This function creates an observations object (list) for use in PEST based 
   # on the amalgamation of data from various sources. The object contains
@@ -18,13 +18,13 @@ obs4PEST <- function(strD = NULL, endD = NULL) {
   # ________________________________________________________________________----
   # Load And Process Data----  
   # Load observation data
-  d <- load_obs(strD, endD); d <- d[2 : 5] # Don't need flow data so adios!
+  d <- load_obs(strD, endD, HSPF = HSPF)[2 : 6] # Don't need Q data
   
   # Load reach and station links
   rows <- read.csv('D:/siletz_q2k/05_calib/rhdr.csv', stringsAsFactors = F)
   
   # ________________________________________________________________________----
-  # Create A Master Keys Of Obs Id List----
+  # Create A Master Keys Of Observation IDs, this will be reduced later ----
   obID <- create_key(strD = strD, endD = endD)
   
   max <- nrow(obID)
@@ -116,6 +116,23 @@ obs4PEST <- function(strD = NULL, endD = NULL) {
   l <- rbind(l, k600)
   
   # ________________________________________________________________________----
+  # Use HSPF model NOx and TP data at STA 10391 - Daily means: NO3 and TP ----
+  hspf <- d[['hspf']]
+  
+  # Add the reach number
+  hspf$q2kR <- addZ(8)
+  
+  # Cast as long
+  hspf <- melt(data = hspf, id.vars = c('date', 'q2kR'), variable.name = 'par',
+               value.name = 'val')
+  
+  # The key in order includes: reach#, dummy parm (XXX), month, day
+  hspf$obID <- paste0('r', hspf$q2kR, hspf$par, addZ(month(hspf$date)),
+                      addZ(day(hspf$date)), 12)
+  
+  l <- rbind(l, hspf[, c(2, 1, 4, 5)])
+
+  # ________________________________________________________________________----
   # Merge, Record and Clean Data ----
   obID <- merge(obID, l, by.x = 'obID', by.y = 'obID', all.x = T)
   
@@ -138,7 +155,11 @@ obs4PEST <- function(strD = NULL, endD = NULL) {
   # Oops! Convert chlorophyll a back to ug/L (from mg/L)
   deqG[, 11] <- deqG[, 11] * 1000
   
-  # Fix stations: 29287 -> 10391; 38919 -> 29287; remove 38928 and 38930
+  # Fix stations: So the station IDs for the grab samples was initially off.
+  # First bridge was initially labeled 10391 (Ojalla) and that's how it is in
+  # The csv. So for this, relabel them incorrectly to match up the correct
+  # station ID and data
+  # 29287 -> 10391; 38919 -> 29287; remove 38928 and 38930
   deqG$STAID <- ifelse(deqG$STAID == 29287, 10391,
                        ifelse(deqG$STAID == 38919, 10391, deqG$STAID))
   
@@ -186,7 +207,11 @@ obs4PEST <- function(strD = NULL, endD = NULL) {
   
   names(deqG) <- c('obID', 'date', 'q2kR', 'indx', 'val')
   
+  # Bind the data
   obID <- rbind(obID, deqG)
+
+  # ________________________________________________________________________----
+  # Add group data and output observations object ----
   
   # Add the group, package up and return
   obID$grp <- substr(x = obID$obID, start = 4, stop = 6)
@@ -239,8 +264,7 @@ mod4PEST <- function(mOut = NULL, obID = NULL, strD = NULL, fOut = NULL,
   
   # ________________________________________________________________________----  
   # Load and process model data ----
-  suppressMessages(library(dplyr))
-  suppressMessages(library(reshape2))
+  suppressMessages(library(dplyr)); suppressMessages(library(reshape2))
   suppressMessages(library(lubridate))
     
   dt <- read_q2k_out(mOut)
@@ -266,11 +290,14 @@ mod4PEST <- function(mOut = NULL, obID = NULL, strD = NULL, fOut = NULL,
   dt$rch <- addZ(dt$rch)
 
   # Melt to long
-  dt <- melt(dt, id.vars = c('tme', 'rch'), variable.name = 'par', value.name = 'val')
+  dt <- melt(dt, id.vars = c('tme', 'rch'), variable.name = 'par',
+             value.name = 'val')
 
-  # Separate reaeration for aggregation
-  dtR <- dt[which(dt$par == 'rea'), ]; dtE <- dt[-which(dt$par == 'rea'), ]
-
+  # Isolate reaeration, no3 and tp for daily mean aggregation
+  dtR <- dt[which(dt$par %in% c('rea', 'nox', 'tpX')), ] # Daily
+  
+  dtE <- dt[-which(dt$par == 'rea'), ] # Hourly
+  
   # Make the time into the units to which the data will be aggregated
   dtR$tme <- floor_date(dtR$tme, 'day'); dtE$tme <- floor_date(dtE$tme, 'hour')
 
@@ -281,7 +308,12 @@ mod4PEST <- function(mOut = NULL, obID = NULL, strD = NULL, fOut = NULL,
   dtR <- aggregate(dtR$val, by = list(dtR$tme, dtR$rch, dtR$par), 'mean', na.rm = T)
 
   dtR$Group.1 <- dtR$Group.1 + hours(12)
+
+  # Change the group codes of NO3 and TP in the daily frame from X to H
+  dtR$Group.3 <- ifelse(dtR$Group.3 == 'nox', 'noH',
+                        ifelse(dtR$Group.3 == 'tpX', 'tpH', 'rea'))
   
+  # Bring the two data frames back together
   dt <- rbind(dtE, dtR); names(dt) <- c('date', 'q2kR', 'par', 'val')
   
   # Create the mdID for merging with obID
@@ -292,30 +324,32 @@ mod4PEST <- function(mOut = NULL, obID = NULL, strD = NULL, fOut = NULL,
   
   # Merge the two obID with the mdID
   dt <- merge(obID, dt, by.x = 'obID', by.y = 'mdID', all.x = T, all.y = F)
-  
+
   # Create a df to order after merging
   # For all WQ
-  ord <- data.frame(par = c('tmp', 'doc', 'phX', 'rea', 'nox', 'tpX', 'toc',
-                            'bod', 'cha'), ord = c(1, 2, 3, 4, 5, 6, 7, 8, 9))
+  ord <- data.frame(par = c('tmp', 'doc', 'phX', 'rea', 'noH', 'tpH', 'nox',
+                            'tpX', 'toc', 'bod', 'cha'),
+                    ord = c(    1,     2,     3,     4,     5,     6,     7,
+                                8,     9,    10,    11))
   
   # For temperature only
   # ord <- data.frame(par = c('tmp', 'rea'), ord = c(1, 2))
-   
+  
   dt <- merge(dt, ord)
-   
+  
   dt <- dt %>% arrange(ord, q2kR, date)
   
   # ________________________________________________________________________----
   # CREATE THE OUTPUT (.out) FILE
-  mOut <- paste0(dt$obID, '  ', format(dt$val, digits = 10, scientific = T))
+  xOut <- paste0(dt$obID, '  ', format(dt$val, digits = 10, scientific = T))
   
-  write.table(mOut, fOut, quote = F, row.names = F, col.names = F)
+  write.table(xOut, fOut, quote = F, row.names = F, col.names = F)
 
 }
 
 # CREATE OUPUT PLOTS ----
 run_plots <- function(nDir = NULL, mOut = NULL, wudy = NULL, strD = NULL,
-                      endD = NULL, adMt = NULL) {
+                      endD = NULL, adMt = NULL, HSPF = NULL) {
   
   # This function creates output plots (time series and longitudinal) for most
   # recent run an output files in the PEST folder (mOut). It creates a directory 
@@ -326,7 +360,7 @@ run_plots <- function(nDir = NULL, mOut = NULL, wudy = NULL, strD = NULL,
   
   if (!dir.exists(nDir)) {dir.create(nDir)}
   
-  obs_CW <- obs4PEST(strD, endD)
+  obs_CW <- obs4PEST(strD, endD, HSPF)
   
   # Reduce the data frame and plot!
   oOut <- obs_CW[['obs']][, c(2, 3, 6, 5)]
@@ -348,13 +382,15 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
   # observation files
 
   suppressMessages(library(ggplot2)); suppressMessages(library(lubridate))
+  suppressMessages(library(reshape2))
   
   # ________________________________________________________________________----    
   # Load and organize the data ----
   # Bring in station reach match
   rows <- read.csv('D:/siletz_q2k/05_calib/rhdr.csv', stringsAsFactors = F)
   
-  # Model data first!
+  # ________________________________________________________________________----
+  # Process model data ----
   mOut <- read_q2k_out(mOut)
   
   mOut <- mOut[, c(  1,   3,   4,   7,  24,  59,  12,  31,  35,   9,  15)]
@@ -363,7 +399,9 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
                    'bod', 'cha')
   
   # Remove warm-up days
-  mOut <- mOut[which(mOut$tme >= wudy), ]; mOut$tme <- mOut$tme - wudy
+  if(!is.null(wudy)) {
+    mOut <- mOut[which(mOut$tme >= wudy), ]; mOut$tme <- mOut$tme - wudy
+  }
   
   # Time - convert from days to seconds and convert to POSIXct
   mOut$tme <- as.POSIXct(mOut$tme * 86400, origin = strD, tz = 'America/Los_Angeles') +
@@ -379,9 +417,17 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
   mOut <- melt(mOut, id.vars = c('tme', 'rch'), variable.name = 'par',
                value.name = 'val'); mOut$par <- as.character(mOut$par)
   
-  # Observations - already bringing in a formated df, but just change the names
+  # ________________________________________________________________________----
+  # Process observations ----
   names(oOut) <- c('tme', 'rch', 'par', 'val'); oOut$rch <- as.numeric(oOut$rch)
   
+  # Seperate the HSPF data and monitoring data
+  hNut <- oOut[which(oOut$par %in% c('noH', 'tpH')), ]
+
+  oOut <- oOut[-which(oOut$par %in% c('noH', 'tpH')), ]
+  
+  # ________________________________________________________________________----
+  # Prep combined data for plotting ----
   # Create a column in both for source (model/observation); bind the tables
   mOut$src <- 'mod'; oOut$src <- 'obs'; dt <- rbind(mOut, oOut)
   
@@ -443,9 +489,16 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
   }
 
   # ________________________________________________________________________----    
-  # Plot! ----
+  # Plot ----
+  lims <- data.frame(pars = c('bod', 'cha', 'doc', 'nox', 'phX', 'rea', 'tmp',
+                              'toc', 'tpX'),
+                     ymin = c( 0.00,  0.00,  5.00,  0.00,  7.00,  0.00,  15.0,
+                               0.00,  0.00),
+                     ymax = c( 0.80,  0.80,  13.0,  0.30, 11.00,  20.0,  27.0,
+                               1.80, 0.025))
+  
   for (i in 1 : length(unique(dt$par))) {
-
+    
     # # Time series graphs (facet station)
     datM <- dt[which(dt$par == unique(dt$par)[i] & dt$src == 'mod'), ]
     datO <- dt[which(dt$par == unique(dt$par)[i] & dt$src == 'obs'), ]
@@ -455,47 +508,73 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
             ylab(paste0(pars[i, 2], ' (', pars[i, 3], ')')) +
             theme_bw() + theme(axis.title.x = element_blank()) +
             facet_wrap(. ~ rch, ncol = 2, labeller = label_both) +
+            scale_y_continuous(limits = c(lims$ymin[i], lims$ymax[i])) +
             geom_point(data = datO, aes(x = tme, y = val),
                        color = 'darkred', stroke = 0.6, shape = 5, size = 0.9)
 
-    ggsave(filename = paste0('ts_', pars[i, 1], '.png'), plot = plt1, width = 15,
-           height = 10, path = nDir, units = 'in', dpi = 300)
+    ggsave(filename = paste0('ts_', pars[i, 1], '.png'), plot = plt1, width = 17,
+           height = 11, path = nDir, units = 'in', dpi = 300)
 
     # Longitudinal graphs (facet day) x = rch, y = val, facet = dte, group = stt
     # Plots 10 facets at a time
     ddM <- dd[which(dd$par == unique(dd$par)[i] & dd$src == 'mod'), ]
     ddO <- dd[which(dd$par == unique(dd$par)[i] & dd$src == 'obs'), ]
-    
+
     for (j in 1 : nGrp) {
 
       ddMB <- ddM[which(ddM$dte %in% grps[[j]]), ]
-      
+
       ddMB <- dcast(ddMB[, c(2, 5 : 7)], dte + dst ~ stt, value.var = 'val')
-      
+
       ddOB <- ddO[which(ddO$dte %in% grps[[j]]), ]
-            
+
+      # # Recast observations to wide
+      # ddOB <- dcast(ddOB[, c(2, 5 : 7)], dte + dst ~ stt, value.var = 'val')
+
       plt2 <- ggplot(dat = ddMB, aes(x = dst, y = mean)) +
               geom_line(color = 'darkblue', size = 1.1) +
               ylab(paste0(pars[i, 2], ' (', pars[i, 3], ')')) +
               theme_bw() + facet_wrap(.~dte, ncol = 2) +
               geom_point(data = ddOB, aes(x = dst, y = val, group = stt),
                          color = 'darkred', stroke = 1.2, shape = 5, size = 1.1)  +
+              # geom_errorbar(data = ddOB, aes(ymin = min, ymax = max), width = 0.8) +
               geom_ribbon(aes(ymin = ddMB$min, ymax = ddMB$max), alpha = 0.2,
                           fill = 'blue', linetype = 'blank')
 
       dtes <- format(grps[[j]][c(1, length(grps[[j]]))], '%m%d')
-      
+
       ggsave(filename = paste0('long_', pars[i, 1], '_', dtes[1], '_', dtes[2], '.png'),
              plot = plt2, width = 17, height = 11, path = nDir, units = 'in',
              dpi = 300, limitsize = F)
-      
+
     }
     
   }
 
-  # ________________________________________________________________________----    
-  # Calibration metrics ----
+  # ________________________________________________________________________----
+  # HSPF nutrient data ----
+  # Isolate reach 8 and NO3 and TP data
+  mNut <- mOut[which(mOut$rch == 8 & mOut$par %in% c('tpX', 'nox')), ]
+
+  # Aggregate to daily mean  
+  mNut$dte <- floor_date(mNut$tme, 'day')
   
+  mNut <- aggregate(x = mNut[, 4], by = list(mNut$dte, mNut$par), FUN = 'mean')
+
+  names(mNut) <- c('date', 'par', 'val')
+  
+  # Change the names of the parameters
+  mNut$par <- ifelse(mNut$par == 'nox', 'NO3 (mg/L)', 'TP (mg/L)')
+  hNut$par <- ifelse(hNut$par == 'noH', 'NO3 (mg/L)', 'TP (mg/L)')
+
+  pl <- ggplot(data = mNut, aes(x = date, y = val)) +
+        geom_line(size = 1.2, color = 'darkblue') +
+        geom_point(data = hNut, aes(x = tme, y = val), color = 'darkred',
+                   stroke = 1.2, shape = 5, size = 1.1) +
+        facet_wrap(.~ par, ncol = 1, scales = "free_y")
+
+  ggsave(filename = 'hspf_nutrients.png', plot = pl, width = 8.5, height = 11,
+         path = nDir, units = 'in', dpi = 300)
   
 }
 
@@ -679,7 +758,7 @@ read_q2k_out <- function(mOut = NULL) {
 }
 
 # LOAD OBS DATA 4 Q2KW CAL (PEST OR AUTOCAL) ----
-load_obs <- function(strD = NULL, endD = NULL) {
+load_obs <- function(strD = NULL, endD = NULL, HSPF = NULL) {
 
   # Returns a list of 5 data frames with the following observation data:
   # 1) Reach flows per basin from HSPF
@@ -695,18 +774,20 @@ load_obs <- function(strD = NULL, endD = NULL) {
   pth1 <- paste0('//deqhq1/tmdl/TMDL_WR/MidCoast/Models/Dissolved Oxygen/Middle',
                  '_Siletz_River_1710020405/001_data/')
   
-  d <- list(hspf = readRDS('D:/siletz/outputs/q2k_noSTP/rchQLC_NOx.RData'),
-            k600 = readRDS(paste0(pth1, 'metabolism/Metab_Output_MLE_all_wDepth.RData')),
-            lswc = read.csv(paste0(pth1, 'wq_data/Monitoring 2017/LSWCD/Lincoln',
-                                   '_SWCD_SILETZ RIVER_06292017-01052018/siletz',
-                                   '_volmon_cont_data.csv'), stringsAsFactors = F),
-            deqC = read.csv(paste0(pth1, 'wq_data/deq_cont_2017.csv'),
+  d <- list(hspfQ = readRDS('D:/siletz/outputs/q2k_noSTP/rchQLC_NOx.RData'),
+            k600  = readRDS(paste0(pth1, 'metabolism/Metab_Output_MLE_all_wDepth.RData')),
+            lswc  = read.csv(paste0(pth1, 'wq_data/Monitoring 2017/LSWCD/Lincoln',
+                                    '_SWCD_SILETZ RIVER_06292017-01052018/siletz',
+                                    '_volmon_cont_data.csv'), stringsAsFactors = F),
+            deqC  = read.csv(paste0(pth1, 'wq_data/deq_cont_2017.csv'),
                              stringsAsFactors = F),
-            deqG = read.csv(paste0(pth1, 'wq_data/Monitoring 2017/DEQ/Grab_Samp',
-                                   'les/deq_grabs_2017.csv'), stringsAsFactors = F))
+            deqG  = read.csv(paste0(pth1, 'wq_data/Monitoring 2017/DEQ/Grab_Samp',
+                                    'les/deq_grabs_2017.csv'), stringsAsFactors = F))
+  
+  if (!is.null(HSPF)) d[['hspf']] <- add_hspf(strD, endD, HSPF)
 
   # Isolate the flows only from HSPF
-  d[['hspf']] <- d[['hspf']]$reach_flows
+  d[['hspfQ']] <- d[['hspfQ']]$reach_flows
   
   # Isolate the list for the DO standard period
   if (!is.null(strD)) {
@@ -746,7 +827,7 @@ load_obs <- function(strD = NULL, endD = NULL) {
   }
   
   # Coerce dates
-  names(d[['hspf']])[1] <- 'date'
+  names(d[['hspfQ']])[1] <- 'date'
   
   d[['k600']]$date <- as.POSIXct(d[['k600']]$date, '%Y-%m-%d', tz = tz)
   
@@ -760,7 +841,8 @@ load_obs <- function(strD = NULL, endD = NULL) {
   d[['deqG']]$date <- as.POSIXct(d[['deqG']]$DATE, '%Y-%m-%d %H:%M', tz = tz)
 
   # Trim dates to specified start and end dates
-  for (i in 1 : 5) {d[[i]] <- d[[i]][which(d[[i]]$date >= strD & d[[i]]$date <= endD), ]}
+  for (i in 1 : 5) {d[[i]] <- d[[i]][which(d[[i]]$date >= strD &
+                                           d[[i]]$date <= endD), ]}
 
   return(d)
 
@@ -777,19 +859,20 @@ add_weights <- function(df = NULL) {
 
   # CHANGE ME __________________________________________________________________
   # Change me if the groups or the objective function group weights change    
-  relWgt <- data.frame(grp = c("tmp", "doc", "phX", "rea", "nox",
+  relWgt <- data.frame(grp = c("tmp", "doc", "phX", "rea", "noH", "tpH", "nox",
                                "tpX", "toc", "bod", "cha"),
-                       rel = c(    0,    72,    18,     1,     2,
-                                   2,     1,     1,     2),
+                       rel = c(    0,    70,    15,     1,   5.5,   5.5,     1,
+                                   1,  0.25,  0.25,   0.5),
                        stringsAsFactors = F) %>%
             mutate(num = rep(0, length(grp)))
+
   # CHANGE ME __________________________________________________________________
 
   for (i in 1 : nrow(relWgt)) {
     relWgt[i, 3] <- length(which(df$grp == unique(relWgt$grp)[i]))
   }
   
-  relWgt <- relWgt %>% mutate(wgt = rel / num)
+  relWgt <- relWgt %>% mutate(wgt = (rel / num) * 50)
   
   # Merge the tables to assign a weights and reorder per the index
   df <- merge(df, relWgt[, c(1, 4)], all = T); df <- df %>% arrange(indx)
@@ -816,32 +899,43 @@ create_key <- function(strD = NULL, endD = NULL) {
   
   nmes <- c('tmp', 'doc', 'phX'); obID <- data.frame(stringsAsFactors = F)
   
-  # Continuous parameters
+  # Continuous (hourly) parameters
   for (i in 1 : 3) {
     
     for (j in 1 : 10) {
       
       # The key in order includes: reach#, parm, month, day, hour
       temp <- data.frame(date = dts1, q2kR = addZ(rep(j, length(dts1)))) %>%
-        mutate(obID = paste0('r', q2kR, nmes[i], addZ(month(date)),
-                             addZ(day(date)), addZ(hour(date))))
+              mutate(obID = paste0('r', q2kR, nmes[i], addZ(month(date)),
+                                   addZ(day(date)), addZ(hour(date))))
       
       obID <- rbind(obID, temp)
       
     }
   }
   
-  # Reaeration
+  # Daily parameters - Reaeration, NOx and TP (hspf)
   for (i in 1 : 10) {
     
     temp <- data.frame(date = dts2, q2kR = addZ(rep(i, length(dts2)))) %>%
-      mutate(obID = paste0('r', q2kR, 'rea', addZ(month(date)),
-                           addZ(day(date)), 12)) # Add 12 for midday (avg)
+            mutate(obID = paste0('r', q2kR, 'rea', addZ(month(date)),
+                                 addZ(day(date)), 12)) # Add 12 for midday (avg)
     
     obID <- rbind(obID, temp)
     
   }
   
+  tmpN <- data.frame(date = dts2, q2kR = addZ(rep(8, length(dts2)))) %>%
+          mutate(obID = paste0('r', q2kR, 'noH', addZ(month(date)),
+                               addZ(day(date)), 12)) # Add 12 for midday (avg)
+  
+  tmpP <- data.frame(date = dts2, q2kR = addZ(rep(8, length(dts2)))) %>%
+          mutate(obID = paste0('r', q2kR, 'tpH', addZ(month(date)),
+                               addZ(day(date)), 12)) # Add 12 for midday (avg)
+  
+  obID <- rbind(obID, tmpN, tmpP)
+  
+  # Index and return object (df)
   obID$indx <- 1 : nrow(obID)
   
   return(obID)
@@ -992,6 +1086,7 @@ rating_curves <- function(df = NULL, par = NULL, file = NULL, trns = NULL) {
 
 }
 
+# ADD METEOROLOGIC DATA FOR TEMPERATUYRE ----
 add_met <- function(adMt = NULL, strD = NULL, endD = NULL) {
   
   suppressMessages(library(reshape2))
@@ -1040,7 +1135,8 @@ add_met <- function(adMt = NULL, strD = NULL, endD = NULL) {
   
 }
 
-temp_metrics <- function(dt = dt) {
+# CALCULATE METRICS FOR TEMPERATURE CALIBRATION - HOURLY AND 7DADM MODEL ----
+temp_metrics <- function(dt = NULL) {
   
   library(lubridate); library(dplyr); library(reshape2); library(hydroGOF)
 
@@ -1165,6 +1261,41 @@ temp_metrics <- function(dt = dt) {
   }
 
   return(out)
+
+}
+
+add_hspf <- function(strD = NULL, endD = NULL, HSPF = NULL) {
+  
+  library(lubridate)
+  
+  source('d:/siletz/scripts/R/utilities.R')
+  
+  # Convert dates and add a '/' to HSPF directory
+  timeZone <- 'America/Los_Angeles'
+  if (!is.POSIXct(strD)) {strD <- as.POSIXct(strD, '%Y-%m-%d', tz = timeZone)}
+  if (!is.POSIXct(endD)) {endD <- as.POSIXct(endD, '%Y-%m-%d', tz = timeZone)}
+  if (substr(HSPF, nchar(HSPF), nchar(HSPF)) != '/') {HSPF <- paste0(HSPF, '/')}
+  
+  # Pull in the HSPF data
+  temp <- list(noH = readRDS(paste0(HSPF, 'rchQLC_NOx.RData')),
+               tpH = readRDS(paste0(HSPF, 'rchQLC_TP.RData')))
+  
+  # Extract the needed HSPF data
+  hspf <- data.frame(time = temp[['noH']][['rOut_conc']]$Date,
+                     noH  = temp[['noH']][['rOut_conc']]$Bas14,
+                     tpH  = temp[['tpH']][['rOut_conc']]$Bas14)
+  
+  hspf <- hspf[which(hspf$time >= strD & hspf$time <= endD), ]
+
+  # Calculate daily mean values
+  hspf$date <- floor_date(hspf$time, 'day')
+  
+  hspf <- aggregate(x = hspf[, 2 : 3], by = list(hspf$date), FUN = 'mean')
+  
+  names(hspf)[1] <- 'date'
+  
+  # Return output DF
+  return(hspf)
 
 }
 
