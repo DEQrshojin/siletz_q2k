@@ -337,7 +337,7 @@ mod4PEST <- function(mOut = NULL, obID = NULL, strD = NULL, fOut = NULL,
   
   dt <- merge(dt, ord)
   
-  dt <- dt %>% arrange(ord, q2kR, date)
+  dt <- dt %>% arrange(ord, q2kR, date) 
   
   # ________________________________________________________________________----
   # CREATE THE OUTPUT (.out) FILE
@@ -368,9 +368,9 @@ run_plots <- function(nDir = NULL, mOut = NULL, wudy = NULL, strD = NULL,
   # Run all WQ parameters
   x <- cal_supp(strD, mOut, oOut, nDir, wudy)
   
-  # Run temperature only
-  # x <- cal_supp_T(strD, mOut, oOut, nDir, wudy, adMt = adMt)
-  
+  # Run only temperature
+  # x <- cal_supp_T(strD, mOut, oOut, nDir, wudy)
+
 }
 
 # WATER QUALITY CALIBRATION FUNCTIONS ----
@@ -404,8 +404,7 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
   }
   
   # Time - convert from days to seconds and convert to POSIXct
-  mOut$tme <- as.POSIXct(mOut$tme * 86400, origin = strD, tz = 'America/Los_Angeles') +
-              hours(7)
+  mOut$tme <- as.POSIXct(mOut$tme * 86400, origin = strD, tz = 'America/Los_Angeles') + hours(7)
 
   # Convert nitrate and phosphate from ug/L to mg/L
   for (i in 7 : 8) {mOut[, i] <- mOut[, i] / 1000}
@@ -425,7 +424,7 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
   hNut <- oOut[which(oOut$par %in% c('noH', 'tpH')), ]
 
   oOut <- oOut[-which(oOut$par %in% c('noH', 'tpH')), ]
-  
+
   # ________________________________________________________________________----
   # Prep combined data for plotting ----
   # Create a column in both for source (model/observation); bind the tables
@@ -433,6 +432,10 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
   
   # Fix TP and pH for Obs -- switch x w/ X 
   dt$par <- ifelse(dt$par == 'tpx', 'tpX', ifelse(dt$par == 'phx', 'phX', dt$par))
+  
+  # ________________________________________________________________________----
+  # Send dt out for error statistics and calculations ----
+  mtrc <- wq_metrics(dt = dt, dir = nDir)
 
   # Parameter switch
   pars <- data.frame(pr1 = c('tmp', 'doc', 'phX', 'rea', 'nox', 'tpX', 'toc', 'bod', 'cha'),
@@ -492,54 +495,88 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
   # Plot ----
   lims <- data.frame(pars = c('bod', 'cha', 'doc', 'nox', 'phX', 'rea', 'tmp',
                               'toc', 'tpX'),
-                     ymin = c( 0.00,  0.00,  5.00,  0.00,  7.00,  0.00,  15.0,
+                     ymin = c( 0.00,  0.00,  5.00,  0.00,  6.00,  0.00,   5.0,
                                0.00,  0.00),
-                     ymax = c( 0.80,  0.80,  13.0,  0.30, 11.00,  20.0,  27.0,
-                               1.80, 0.025))
-  
+                     ymax = c( 1.00,  0.80,  15.0,  1.00, 12.00,  20.0,  30.0,
+                               2.50,  0.15))
+
   for (i in 1 : length(unique(dt$par))) {
     
     # # Time series graphs (facet station)
     datM <- dt[which(dt$par == unique(dt$par)[i] & dt$src == 'mod'), ]
+    
     datO <- dt[which(dt$par == unique(dt$par)[i] & dt$src == 'obs'), ]
+    
+    names(datM)[1] <- names(datO)[1] <- 'Reach'
 
-    plt1 <- ggplot(dat = datM, aes(x = tme, y = val)) +
-            geom_line(color = 'darkblue', size = 1.1) +
+    plt1 <- ggplot(dat = datM, aes(x = tme, y = val, color = 'darkblue')) +
+            geom_line(size = 1.1) + xlab(NULL) + 
             ylab(paste0(pars[i, 2], ' (', pars[i, 3], ')')) +
-            theme_bw() + theme(axis.title.x = element_blank()) +
-            facet_wrap(. ~ rch, ncol = 2, labeller = label_both) +
+            facet_wrap(.~ Reach, ncol = 2, labeller = label_both) +
+            geom_point(data = datO, aes(x = tme, y = val, fill = 'yellow'),
+                       color = 'darkred', stroke = 0.6, shape = 5, size = 0.9) +
             scale_y_continuous(limits = c(lims$ymin[i], lims$ymax[i])) +
-            geom_point(data = datO, aes(x = tme, y = val),
-                       color = 'darkred', stroke = 0.6, shape = 5, size = 0.9)
+            guides(col = guide_legend(ncol = 1)) + theme_bw() + 
+            scale_color_manual(values = c('darkblue'), labels = c('Model predictions')) +
+            scale_fill_manual(values = c('yellow'), labels = c('Observations')) +
+            theme(legend.position = 'bottom',
+                  legend.text = element_text(size = 13),
+                  legend.title = element_blank(),
+                  axis.text.y = element_text(size = 13),
+                  axis.title.y = element_text(size = 15),
+                  axis.text.x = element_text(size = 13))
 
     ggsave(filename = paste0('ts_', pars[i, 1], '.png'), plot = plt1, width = 17,
            height = 11, path = nDir, units = 'in', dpi = 300)
 
     # Longitudinal graphs (facet day) x = rch, y = val, facet = dte, group = stt
-    # Plots 10 facets at a time
     ddM <- dd[which(dd$par == unique(dd$par)[i] & dd$src == 'mod'), ]
+    
     ddO <- dd[which(dd$par == unique(dd$par)[i] & dd$src == 'obs'), ]
+    
+    names(ddM)[1] <- names(ddO)[1] <- 'Reach'
 
     for (j in 1 : nGrp) {
 
       ddMB <- ddM[which(ddM$dte %in% grps[[j]]), ]
 
-      ddMB <- dcast(ddMB[, c(2, 5 : 7)], dte + dst ~ stt, value.var = 'val')
+      ddMB <- dcast(ddMB[, c(2, 5 : 7)], dte + dst ~ stt, value.var = 'val',
+                    fun.aggregate = mean)
 
       ddOB <- ddO[which(ddO$dte %in% grps[[j]]), ]
+  
+      # Recast observations to wide (if data are present otherwise don't plot)
+      if(nrow(ddOB) == 0) {
+        ddOB <- ddMB[1, ]; ddOB <- ddOB[-1, ]
+      } else {
+        ddOB <- dcast(ddOB[, c(2, 5 : 7)], dte + dst ~ stt, value.var = 'val',
+                      fun.aggregate = mean)
+      }
 
-      # # Recast observations to wide
-      # ddOB <- dcast(ddOB[, c(2, 5 : 7)], dte + dst ~ stt, value.var = 'val')
+      plt2 <- ggplot(dat = ddMB) + ylab(paste0(pars[i, 2], ' (', pars[i, 3], ')')) +
+              xlab('River Mile') + theme_bw() + facet_wrap(.~ dte, ncol = 2) +
+              scale_y_continuous(limits = c(lims$ymin[i], lims$ymax[i])) + 
+              geom_line(aes(x = dst, y = mean, color = 'darkblue')) +
+              geom_ribbon(aes(x = dst, ymin = ddMB$min, ymax = ddMB$max,
+                              color = 'darkblue'), fill = 'blue', alpha = 0.2) +
+              scale_color_manual(values = 'darkblue',
+                                 labels = 'Model daily mean (middle line)\nand range (filled box)') +
+              theme(legend.title = element_blank(), legend.position = 'bottom',
+                    legend.text = element_text(size = 13),
+                    axis.text.y = element_text(size = 13),
+                    axis.text.x = element_text(size = 13),
+                    axis.title.y = element_text(size = 15),
+                    axis.title.x = element_text(size = 15))
 
-      plt2 <- ggplot(dat = ddMB, aes(x = dst, y = mean)) +
-              geom_line(color = 'darkblue', size = 1.1) +
-              ylab(paste0(pars[i, 2], ' (', pars[i, 3], ')')) +
-              theme_bw() + facet_wrap(.~dte, ncol = 2) +
-              geom_point(data = ddOB, aes(x = dst, y = val, group = stt),
-                         color = 'darkred', stroke = 1.2, shape = 5, size = 1.1)  +
-              # geom_errorbar(data = ddOB, aes(ymin = min, ymax = max), width = 0.8) +
-              geom_ribbon(aes(ymin = ddMB$min, ymax = ddMB$max), alpha = 0.2,
-                          fill = 'blue', linetype = 'blank')
+      if (nrow(ddOB) != 0) {
+        plt2 <- plt2 + geom_point(dat = ddOB, aes(x = dst, y = mean, fill = 'yellow'), 
+                                  size = 3, shape = 5) +
+                       geom_errorbar(dat = ddOB, width = 1.1,
+                                     aes(x = dst, ymin = min, ymax = max, linetype = 'solid')) +
+                       guides(linetype = guide_legend(order = 1)) +
+                       scale_fill_manual(values = 'yellow', labels = 'Observations daily mean') +
+                       scale_linetype_manual(values = 'solid', labels = 'Observation daily range') 
+      }
 
       dtes <- format(grps[[j]][c(1, length(grps[[j]]))], '%m%d')
 
@@ -548,7 +585,6 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
              dpi = 300, limitsize = F)
 
     }
-    
   }
 
   # ________________________________________________________________________----
@@ -564,160 +600,31 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
   names(mNut) <- c('date', 'par', 'val')
   
   # Change the names of the parameters
-  mNut$par <- ifelse(mNut$par == 'nox', 'NO3 (mg/L)', 'TP (mg/L)')
-  hNut$par <- ifelse(hNut$par == 'noH', 'NO3 (mg/L)', 'TP (mg/L)')
+  mNut$par <- ifelse(mNut$par == 'nox', 'Nitrate (mg/L)', 'Total Phosphorus (mg/L)')
+  hNut$par <- ifelse(hNut$par == 'noH', 'Nitrate (mg/L)', 'Total Phosphorus (mg/L)')
 
-  pl <- ggplot(data = mNut, aes(x = date, y = val)) +
-        geom_line(size = 1.2, color = 'darkblue') +
-        geom_point(data = hNut, aes(x = tme, y = val), color = 'darkred',
-                   stroke = 1.2, shape = 5, size = 1.1) +
-        facet_wrap(.~ par, ncol = 1, scales = "free_y")
+  pl <- ggplot(data = mNut, aes(x = date, y = val, color = 'darkblue')) + 
+        geom_line(size = 1.2) + ylab(NULL) + xlab(NULL) +
+        geom_point(data = hNut, aes(x = tme, y = val, fill = 'yellow'), color = 'darkred',
+                   stroke = 1.2, shape = 5, size = 1.1) + 
+        scale_y_continuous(breaks = scales::pretty_breaks(7), limits = c(0, NA)) +
+        facet_wrap(.~ par, strip.position = "left", ncol = 1, scales = "free_y") +
+        guides(col = guide_legend(ncol = 1)) + theme_bw() + 
+        scale_color_manual(values = c('darkblue'), labels = c('QUAL2Kw predictions')) +
+        scale_fill_manual(values = c('yellow'), labels = c('HSPF predictions')) +
+        theme(strip.background = element_blank(), strip.placement = "outside",
+              legend.title = element_blank(), legend.position = 'bottom',
+              legend.text = element_text(size = 13),
+              axis.text.y = element_text(size = 13),
+              axis.text.x = element_text(size = 13),
+              axis.title.y = element_text(size = 15),
+              axis.title.x = element_text(size = 15),
+              strip.text = element_text(size = 15))
 
   ggsave(filename = 'hspf_nutrients.png', plot = pl, width = 8.5, height = 11,
          path = nDir, units = 'in', dpi = 300)
   
-}
-
-# WATER QUALITY CALIBRATION FUNCTIONS ----
-cal_supp_T <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
-                       wudy = NULL, adMt = NULL) {
-  
-  # functions to assess and plot measured and modeled Qual2Kw
-  # Arguments include the path to the folder with modeled output files (mOut)
-  # and observation (oOut)
-  
-  suppressMessages(library(ggplot2)); suppressMessages(library(lubridate))
-  suppressMessages(library(dplyr)); suppressMessages(library(grid))
-  suppressMessages(library(cowplot)); suppressMessages(library(ggpubr));
-  suppressMessages(library(gridExtra)); suppressMessages(library(reshape2))
-
-  # ________________________________________________________________________----    
-  # Load and organize the data ----
-  # Model data first!
-  mOut <- read_q2k_out(mOut)
-  
-  mOut <- mOut[, c( 1, 3, 4)]; names(mOut) <- c('rch', 'tme', 'tmp')
-  
-  # Remove warm-up days
-  mOut <- mOut[which(mOut$tme >= wudy), ]; mOut$tme <- mOut$tme - wudy
-  
-  # Add a leading 0 to the reaches
-  mOut$rch <- addZ(mOut$rch)
-  
-  # Time - convert from days to seconds and convert to POSIXct
-  mOut$tme <- as.POSIXct(mOut$tme * 86400, origin = strD,
-                         tz = 'America/Los_Angeles') + hours(7)
-  
-  # Observations - already formated-remove non-Temp parms and change names
-  oOut <- oOut[which(oOut$grp == 'tmp'), c(2, 1, 4)]
-
-  names(oOut) <- c('rch', 'tme', 'tmp')
-  
-  # Create a column in both for source (model/observation); bind the tables
-  mOut$src <- 'mod'; oOut$src <- 'obs'
-  
-  # Combine the observations and model outputs
-  dt <- rbind(mOut, oOut)
-  
-  # Add a leading "R" to the reaches (for cosmetic & consistency purposes only)
-  dt$rch <- paste0("R", dt$rch)
-  
-  # ________________________________________________________________________----    
-  # Calculate calibration metrics ----
-  mtrc <- temp_metrics(dt = dt)
-
-  # ________________________________________________________________________----    
-  # Prep for plotting ----
-  # Bring in station reach match with RM for plotting
-  rows <- read.csv('D:/siletz_q2k/05_calib/rhdr.csv', stringsAsFactors = F)
-
-  rows$q2kR <- paste0('R', addZ(rows$q2kR))
-
-  dt <- merge(dt, rows[, c(3, 4, 1)], by.x = 'rch', by.y = 'q2kR', all.x = T,
-              all.y = T)
-  
-  dd <- mtrc[['daily']][, c(1, 2, 5, 6)]
-  
-  dd <- melt(dd, id.vars = c('rch', 'dte'), variable.name = 'src',
-             value.name = 'T_7dadm')
-  
-  dd <- merge(dd, rows[, c(3, 4, 1)], by.x = 'rch', by.y = 'q2kR', all.x = T,
-              all.y = F)
-
-  # ________________________________________________________________________----    
-  # Plot! ----
-  # Time series graphs
-  if (!is.null(adMt)) { # If atmospheric data are specified
-    
-    mtDt <- add_met(adMt = adMt, strD = min(mOut$tme), endD = max(mOut$tme))
-    
-    mtDt <- melt(mtDt, id.vars = c('date', 'rch'), value.name = 'val',
-                 variable.name = 'par')
-    
-    for (i in 2 : length(unique(dt$rch))) { # Don't bother with HW
-      
-      tmp1 <- dt[which(dt$rch == unique(dt$rch)[i]), c(1 : 4)]
-      
-      tmp2 <- mtDt[which(mtDt$rch == unique(dt$rch)[i]), ]
-      
-      # Create the stream temperature plot
-      plt1 <- ggplot(data = tmp1[which(tmp1$src == 'mod'), ], aes(x = tme, y = tmp)) +
-              geom_line(color = 'darkblue', size = 0.9) +
-              ylab('Temperature (oC)') + scale_y_continuous(limits = c(0, 30)) +
-              theme_bw() + theme(axis.title.x = element_blank(),
-                                 plot.margin = margin(l = 0.45, unit = 'cm')) +
-              geom_point(data = tmp1[which(tmp1$src == 'obs'), ], aes(x = tme, y = tmp),
-                         color = 'darkred', size = 0.5)
-      
-      # Create the met data plot
-      plt2 <- ggplot(data = tmp2, aes(x = date, y = val)) + geom_point() +
-              theme_bw() + facet_wrap(. ~par, ncol = 1, scales = 'free')
-      
-      # Merge the two plots
-      plt3 <- grid.arrange(plt1, plt2, ncol = 1, heights = c(1, 4))
-
-      # Save as png
-      ggsave(filename = paste0(9, addZ(i - 1), '_ts_temp_', unique(dt$rch)[i], '.jpg'),
-             plot = plt3, path = nDir, width = 7.5, height = 10, dpi = 300, units = "in")
-
     }
-
-  } else { # If atmospheric data are not specified
-    
-    # Time series graphs (facet station)
-    plt1 <- ggplot(dat = dt[which(dt$src == 'mod' & dt$rch != 'R00'), ],
-                   aes(x = tme, y = tmp)) + geom_line(color = 'darkblue', size = 0.9) +
-            ylab('Temperature (oC)') + theme_bw() + theme(axis.title.x = element_blank()) +
-            facet_wrap(. ~ rch, ncol = 2, labeller = label_both) +
-            scale_y_continuous(limits = c(5, 30), breaks = seq(0, 30, 5)) +
-            geom_point(data = dt[which(dt$src == 'obs'), ], aes(x = tme, y = tmp),
-                       color = 'darkred', stroke = 1.1, shape = 5, size = 0.5) +
-            geom_line(data = dt[which(dt$src == 'obs'), ], aes(x = tme, y = tmp),
-                      size = 0.7, color = 'darkred')
-    
-    ggsave(filename = 'TS_hourly_temp.jpg', dpi = 300, plot = plt1, width = 17,
-           height = 11, path = nDir, units = 'in')
-
-  }
-  
-  # Plot 7DADM
-  # Time series graphs (facet station)
-  plt1 <- ggplot(data = dd, aes(x = dte, y = T_7dadm, group = src, color = src)) +
-          geom_line(size = 0.9) + ylab('Temp, 7DADM (oC)') + theme_bw() +
-          scale_color_manual(values = c('darkblue', 'darkred')) +
-          scale_y_continuous(limits = c(5, 30), breaks = seq(0, 30, 5)) + 
-          theme(axis.title.x = element_blank()) + facet_wrap(. ~ rch, ncol = 2)
-  
-  ggsave(filename = 'TS_7dadm_temp.jpg', dpi = 300, plot = plt1, width = 17,
-         height = 11, path = nDir, units = 'in')
-  
-  
-  
-  # Output the metrics table
-  write.csv(x = mtrc[[1]], file = paste0(nDir, '/model_fit_stats.csv'),
-            row.names = F)
-
-}
 
 # ________________________________________________________________________----
 # SUPPLEMENTAL OUTPUT FUNCTIONS
@@ -991,6 +898,314 @@ remove_obs <- function(dtes = NULL, parm = NULL, q2kR = NULL, obID = NULL) {
   
 }
 
+wq_metrics <- function(dt = NULL, dir = NULL) {
+  
+  library(lubridate); library(dplyr); library(reshape2); library(hydroGOF)
+  
+  # ________________________________________________________________________----
+  # Process hourly data - condense model output to hourly ----
+  dt <- dt %>% arrange(par, rch, tme)
+  
+  temp <- dt[which(dt$src == 'mod'), ]
+  
+  temp$indx <- 1 : nrow(temp)
+  
+  temp$hour <- round_date(temp$tme, 'hour')
+  
+  temp$diff <- abs(temp$hour - temp$tme)  
+  
+  # Set up unique lists of parameters and reaches, initialize 'HouR VeCtor' indeces
+  rch <- unique(dt$rch); par <- unique(dt$par); hrvc <- NULL
+  
+  # Create a vector (hrvc) with the indeces of the model data closest to the hour
+  for (i in 1 : length(par)) {
+    
+    for (j in 1 : length(rch)) {
+      
+      tmp1 <- temp[which(temp$rch == rch[j] & temp$par == par[i]), ]
+      
+      hrs <- unique(temp$hour)
+      
+      for (k in 1 : length(hrs)) {
+        
+        tmp2 <- tmp1[which(tmp1$hour == hrs[k]), ]
+        
+        hrvc <- append(hrvc, tmp2[which.min(tmp2$diff), 6])
+        
+      }
+    }
+  }
+
+  tempBU <- temp
+  temp <- tempBU
+  
+  # Isolate those model data in the temp df
+  temp <- temp[hrvc, c(7, 2 : 5)]; names(temp)[1] <- 'tme'; 
+  
+  dt   <- rbind(temp, dt[which(dt$src == 'obs'), 1 : 5])
+  
+  dt   <- dcast(dt, rch + par + tme ~ src, value.var = 'val',
+                fun.aggregate = mean)
+  
+  dt   <- dt[complete.cases(dt), ]
+
+  rch <- unique(dt$rch)
+  
+  # Calculate Statistics ----
+  # Initiate the data frame to house the statistics
+  temp <- data.frame(rch = c(rch, 'tot'), stringsAsFactors = F) %>%
+          mutate(n_hr  = 0, me_hr = 0, mae_hr = 0, rmse_hr = 0, nse_hr = 0,
+                 r2_hr = 0, m_hr  = 0, b_hr   = 0, pm_hr   = 0, pb_hr  = 0)
+
+  labs <- c('CBOD', 'Chl-a', 'DO', "NO3", "pH", "Reaer", "Temp", "TOC", "TP")
+  
+  mtrc <- list()
+  
+  for (i in 1 : length(par)) {
+    
+    mtrc[[i]] <- temp; names(mtrc)[i] <- par[i]
+    
+    tmp1 <- dt[which(dt$par == par[i]), ]
+    
+    for (j in 1 : length(rch)) {
+
+      tmp2 <- tmp1[which(tmp1$rch == rch[j]), ]
+
+      # Calculate the error stats for each reach
+      mtrc[[i]][j, 2 : 11] <- run_error_stats(tmp2$obs, tmp2$mod)
+
+    }
+    
+    # Calculate the error stats for all reaches (per parameter)
+    mtrc[[i]][nrow(mtrc[[i]]), 2 : 11] <- run_error_stats(tmp1$obs, tmp1$mod)
+    # 
+    # # Create pair-wise plots
+    # pl <- ggplot(tmp1, aes(obs, mod, color = as.factor(rch))) +
+    #       geom_point() + labs(color = "Reach") + 
+    #       xlab(paste0('Observed ', labs[i], ' Data')) +
+    #       ylab(paste0('Modeled ', labs[i], ' Output'))
+    #   
+    # ggsave(filename = paste0(dir, '/pw_corr_', par[i], '.png'), plot = pl,
+    #        width = 11, height = 8.5, units = 'in', dpi = 300)
+          
+    # write to file
+    write.csv(mtrc[[i]], file = paste0(dir, '/err_stats_', par[i], '.csv'),
+              row.names = F)
+    
+  }
+}
+
+add_hspf <- function(strD = NULL, endD = NULL, HSPF = NULL) {
+  
+  library(lubridate)
+  
+  source('d:/siletz/scripts/R/utilities.R')
+  
+  # Convert dates and add a '/' to HSPF directory
+  timeZone <- 'America/Los_Angeles'
+  if (!is.POSIXct(strD)) {strD <- as.POSIXct(strD, '%Y-%m-%d', tz = timeZone)}
+  if (!is.POSIXct(endD)) {endD <- as.POSIXct(endD, '%Y-%m-%d', tz = timeZone)}
+  if (substr(HSPF, nchar(HSPF), nchar(HSPF)) != '/') {HSPF <- paste0(HSPF, '/')}
+  
+  # Pull in the HSPF data
+  temp <- list(noH = readRDS(paste0(HSPF, 'rchQLC_NOx.RData')),
+               tpH = readRDS(paste0(HSPF, 'rchQLC_TP.RData')))
+  
+  # Extract the needed HSPF data
+  hspf <- data.frame(time = temp[['noH']][['rOut_conc']]$Date,
+                     noH  = temp[['noH']][['rOut_conc']]$Bas14,
+                     tpH  = temp[['tpH']][['rOut_conc']]$Bas14)
+  
+  hspf <- hspf[which(hspf$time >= strD & hspf$time <= endD), ]
+
+  # Calculate daily mean values
+  hspf$date <- floor_date(hspf$time, 'day')
+  
+  hspf <- aggregate(x = hspf[, 2 : 3], by = list(hspf$date), FUN = 'mean')
+  
+  names(hspf)[1] <- 'date'
+  
+  # Return output DF
+  return(hspf)
+
+}
+
+rename_files <- function(dir = NULL, name = NULL) {
+  
+  # puts a specified prefix in front of each file in the specified directory
+  fils <- list.files(dir)
+  
+  fils <- fils[which(substr(fils, 1, 2) != 'wq')]
+  
+  for (i in 1 : length(fils)) {
+    file.rename(from = paste0(dir, '/', fils[i]),
+                to   = paste0(dir, '/', name, '_', fils[i]))
+  }
+}
+
+run_error_stats <- function(indc = NULL, rspn = NULL) {
+
+  # Pass two vectors (equal length); return vector of n, mean error,
+  # mean absolute error, RMSE, NSE, and correlation with pstats if specified
+
+  if (is.null(indc) & is.null(rspn)) {outV <- rep(NA, 10)} else {
+
+    # Calculate the statistics
+    outV <- c(length(indc),                # n
+              me(indc, rspn),              # Mean error
+              mae(indc, rspn),             # MAE
+              rmse(indc, rspn),            # RMSE
+              suppressWarnings(NSE(indc, rspn, FUN = NULL))) # NSE
+    
+    if (!length(indc) == 0) {
+      
+      rgss <- summary(lm(rspn ~ indc))
+      
+      if (dim(rgss[["coefficients"]])[1] == 2) {
+        
+        outV <- append(outV, c(rgss[["r.squared"]],           # R2
+                               rgss[["coefficients"]][2, 1],  # Slope, m
+                               rgss[["coefficients"]][1, 1],  # Intercept, b
+                               rgss[["coefficients"]][2, 4],  # slope pstat
+                               rgss[["coefficients"]][1, 4])) # int pstat
+        
+      } else {outV <- append(outV, rep(NA, 5))}
+      
+    } else {outV <- append(outV, rep(NA, 5))}
+
+  }
+
+  return(outV)
+  
+}
+
+# CALCULATE METRICS FOR TEMPERATURE CALIBRATION - HOURLY AND 7DADM MODEL ----
+temp_metrics <- function(dt = NULL) {
+  
+  library(lubridate); library(dplyr); library(reshape2); library(hydroGOF)
+  
+  # ________________________________________________________________________----
+  # Calculate 7DADM (new data frame) ----
+  dt$dte <- floor_date(dt$tme, 'day')
+  
+  # Aggregate to daily max temperature
+  dd <- dt %>% group_by(rch, dte, src) %>% summarize(Tmax = max(tmp, na.rm = T))
+  
+  # Reshape to Wide to get pair-side data. Remove dates with any NA values
+  dd <- dcast(dd, rch + dte ~ src, value.var = 'Tmax'); dd <- dd[complete.cases(dd), ]
+  
+  # Calculate the 7DADM
+  rch <- unique(dd$rch)
+  
+  # Initialize the columns of the 7DADM
+  dd$o7dadm <- dd$m7dadm <- 0
+  
+  for (i in 1 : length(rch)) {
+    
+    cond <- which(dd$rch == rch[i])
+    
+    for (j in 3 : 4) {
+      dd[cond, j + 2] <- stats::filter(dd[cond, j], rep(1 / 7, 7), sides = 1)  
+    }
+  }
+  
+  # Remove all NAs
+  dd <- dd[complete.cases(dd), ]  
+  
+  # ________________________________________________________________________----
+  # Process hourly data - condense model output to hourly ----
+  dt <- dt %>% arrange(rch, tme)
+  
+  temp <- dt[which(dt$src == 'mod'), ]
+  
+  temp$indx <- 1 : nrow(temp)
+  
+  temp$hour <- round_date(temp$tme, 'hour')
+  
+  temp$diff <- abs(temp$hour - temp$tme)  
+  
+  rch <- unique(dt$rch)
+  
+  hrvc <- NULL
+  
+  for (i in 1 : length(rch)) {
+    
+    tmp1 <- temp[which(temp$rch == rch[i]), ]; hrs <- unique(temp$hour)
+    
+    for (j in 1 : length(hrs)) {
+      
+      tmp2 <- tmp1[which(tmp1$hour == hrs[j]), ]
+      
+      hrvc <- append(hrvc, tmp2[which.min(tmp2$diff), 6])
+      
+    }
+  }
+  
+  temp <- temp[hrvc, c(1, 7, 3 : 5)]; names(temp)[2] <- 'tme'
+  
+  dt <- rbind(temp, dt[which(dt$src == 'obs'), ])
+  
+  dt <- dcast(dt[, 1 : 4], rch + tme ~ src, value.var = 'tmp')
+  
+  dt <- dt[complete.cases(dt), ]; names(dt)[2] <- 'dte'
+  
+  rch <- unique(dt$rch)
+  
+  # Calculate Statistics ----
+  # Initiate the data frame to house the statistics
+  mtrc <- data.frame(rch = rch, stringsAsFactors = F) %>%
+          mutate(n_7d = 0, me_7d = 0, mae_7d = 0, rmse_7d = 0,
+                 n_hr = 0, me_hr = 0, mae_hr = 0, rmse_hr = 0, nse_hr = 0)
+  
+  for (i in 1 : length(rch)) {
+    
+    tmp1 <- dt[which(dt$rch == rch[i]), ]; tmp2 <- dd[which(dd$rch == rch[i]), ]
+    
+    # Count
+    mtrc[i, 2] <- nrow(tmp2); mtrc[i, 6] <- nrow(tmp1)    
+    
+    # Mean error
+    mtrc[i, 3] <- me(tmp2$m7dadm, tmp2$o7dadm)   # 7DADM
+    mtrc[i, 7] <- me(tmp1$mod, tmp1$obs)         # Hourly
+    
+    # Mean absolute error
+    mtrc[i, 4] <- mae(tmp2$m7dadm, tmp2$o7dadm)  # 7DADM
+    mtrc[i, 8] <- mae(tmp1$mod, tmp1$obs)        # Hourly
+    
+    # Root mean square error
+    mtrc[i, 5] <- rmse(tmp2$m7dadm, tmp2$o7dadm) # 7DADM
+    mtrc[i, 9] <- rmse(tmp1$mod, tmp1$obs)       # Hourly
+    
+    # Nash-sutcliffe efficiency
+    mtrc[i, 10] <- NSE(tmp1$mod, tmp1$obs, FUN = NULL) # Hourly
+    
+  }
+  
+  # Create and format the output object (list of stats df and data dfs)
+  out <- list(metrics = mtrc,
+              daily   = dd,
+              hourly  = dt)
+  
+  # Add rows for reaches with no obs data
+  for (i in 1 : length(out)) {
+    
+    adDf <- data.frame(rch = c('R01', 'R09'),
+                       matrix(data = NA, nrow = 2, ncol = length(out[[i]]) - 1),
+                       stringsAsFactors = F); names(adDf) <- names(out[[i]])
+                       
+    out[[i]] <- rbind(out[[i]], adDf)
+    
+    if (i == 1) {
+      out[[i]] <- out[[i]] %>% arrange(rch)
+    } else {
+      out[[i]] <- out[[i]] %>% arrange(rch, dte)
+    }
+  }
+  
+  return(out)
+  
+}
+
 # Q-V-W HEATSOURCE RATING CURVE ----
 rating_curves <- function(df = NULL, par = NULL, file = NULL, trns = NULL) {
   
@@ -1012,7 +1227,7 @@ rating_curves <- function(df = NULL, par = NULL, file = NULL, trns = NULL) {
   
   # If a transformation is specified (trns) then transform the data
   if (!is.null(trns)) {
-
+    
     if (trns == 'none') { # No transformation
       
       rg <- summary(lm(df$var ~ df$q))
@@ -1056,26 +1271,26 @@ rating_curves <- function(df = NULL, par = NULL, file = NULL, trns = NULL) {
       tFun <- function(a, b, x) (a^2 * x) + (2 * a * b * sqrt(x)) + b^2
       
     } 
-
+    
     else {print('Please enter a valid transformation.'); break}
   }  
-
+  
   if (!is.null(file)) {
-
+    
     x <- seq(min(df$q) * 0.98, max(df$q) * 1.02,
              (max(df$q) * 1.02 - min(df$q) * 0.98) / 100)
-
+    
     line <- data.frame(x = x, y = tFun(rg[[4]][2, 1], rg[[4]][1, 1], x))
-
+    
     plot <- ggplot(df, aes(x = q, y = var)) + theme_bw() +
-            geom_point(size = 1.5, shape = 23, color = 'darkred',
-                       stroke = 1.0, fill = 'yellow') + 
-            geom_line(data = line, aes(x = x, y = y))
-
+      geom_point(size = 1.5, shape = 23, color = 'darkred',
+                 stroke = 1.0, fill = 'yellow') + 
+      geom_line(data = line, aes(x = x, y = y))
+    
     ggsave(filename = file, plot = plot, width = 16, height = 9, units = 'in')
     
   }
-
+  
   # Return the trasnformation linear function, coefficients, and R2 value  
   ls <- list(parameter = par,
              tFun = tFun,
@@ -1083,7 +1298,7 @@ rating_curves <- function(df = NULL, par = NULL, file = NULL, trns = NULL) {
              r2   = rg[["adj.r.squared"]])
   
   return(ls)
-
+  
 }
 
 # ADD METEOROLOGIC DATA FOR TEMPERATUYRE ----
@@ -1103,10 +1318,10 @@ add_met <- function(adMt = NULL, strD = NULL, endD = NULL) {
   
   # Loop through each file, read data and process into output data frame
   for (i in 1 : length(mtPr)) {
-  
+    
     # Read the files (.csv) into a list object
     temp <- data.frame(t(read.csv(mtFl[i], stringsAsFactors = F)))
-
+    
     # Create vector of dates from row names
     temp$date <- as.POSIXct(row.names(temp), 'X%Y.%m.%d.%H.%M.%S',
                             tz = 'America/Los_Angeles')
@@ -1122,189 +1337,153 @@ add_met <- function(adMt = NULL, strD = NULL, endD = NULL) {
     
     # Combine the all of the data frames
     if (i == 1) {mtDt <- temp} else {mtDt <- cbind(mtDt, temp[, 3])}
-
+    
   }
   
   # Rename the columns
   names(mtDt)[3 : 6] <- mtPr
-
+  
   # Trim the data frame to the specified dates
   mtDt <- mtDt[which(mtDt$date >= strD & mtDt$date <= endD), ]
-
+  
   return(mtDt)
   
 }
 
-# CALCULATE METRICS FOR TEMPERATURE CALIBRATION - HOURLY AND 7DADM MODEL ----
-temp_metrics <- function(dt = NULL) {
+# WATER QUALITY CALIBRATION FUNCTIONS ----
+cal_supp_T <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
+                       wudy = NULL, adMt = NULL) {
   
-  library(lubridate); library(dplyr); library(reshape2); library(hydroGOF)
-
-  # ________________________________________________________________________----
-  # Calculate 7DADM (new data frame) ----
-  dt$dte <- floor_date(dt$tme, 'day')
+  # functions to assess and plot measured and modeled Qual2Kw
+  # Arguments include the path to the folder with modeled output files (mOut)
+  # and observation (oOut)
   
-  # Aggregate to daily max temperature
-  dd <- dt %>% group_by(rch, dte, src) %>% summarize(Tmax = max(tmp, na.rm = T))
+  suppressMessages(library(ggplot2)); suppressMessages(library(lubridate))
+  suppressMessages(library(dplyr)); suppressMessages(library(grid))
+  suppressMessages(library(cowplot)); suppressMessages(library(ggpubr));
+  suppressMessages(library(gridExtra)); suppressMessages(library(reshape2))
   
-  # Reshape to Wide to get pair-side data. Remove dates with any NA values
-  dd <- dcast(dd, rch + dte ~ src, value.var = 'Tmax'); dd <- dd[complete.cases(dd), ]
+  # ________________________________________________________________________----    
+  # Load and organize the data ----
+  # Model data first!
+  mOut <- read_q2k_out(mOut)
   
-  # Calculate the 7DADM
-  rch <- unique(dd$rch)
+  mOut <- mOut[, c( 1, 3, 4)]; names(mOut) <- c('rch', 'tme', 'tmp')
   
-  # Initialize the columns of the 7DADM
-  dd$o7dadm <- dd$m7dadm <- 0
-
-  for (i in 1 : length(rch)) {
+  # Remove warm-up days
+  mOut <- mOut[which(mOut$tme >= wudy), ]; mOut$tme <- mOut$tme - wudy
+  
+  # Add a leading 0 to the reaches
+  mOut$rch <- addZ(mOut$rch)
+  
+  # Time - convert from days to seconds and convert to POSIXct
+  mOut$tme <- as.POSIXct(mOut$tme * 86400, origin = strD,
+                         tz = 'America/Los_Angeles') + hours(7)
+  
+  # Observations - already formated-remove non-Temp parms and change names
+  oOut <- oOut[which(oOut$grp == 'tmp'), c(2, 1, 4)]
+  
+  names(oOut) <- c('rch', 'tme', 'tmp')
+  
+  # Create a column in both for source (model/observation); bind the tables
+  mOut$src <- 'mod'; oOut$src <- 'obs'
+  
+  # Combine the observations and model outputs
+  dt <- rbind(mOut, oOut)
+  
+  # Add a leading "R" to the reaches (for cosmetic & consistency purposes only)
+  dt$rch <- paste0("R", dt$rch)
+  
+  # ________________________________________________________________________----    
+  # Calculate calibration metrics ----
+  mtrc <- temp_metrics(dt = dt)
+  
+  # ________________________________________________________________________----    
+  # Prep for plotting ----
+  # Bring in station reach match with RM for plotting
+  rows <- read.csv('D:/siletz_q2k/05_calib/rhdr.csv', stringsAsFactors = F)
+  
+  rows$q2kR <- paste0('R', addZ(rows$q2kR))
+  
+  dt <- merge(dt, rows[, c(3, 4, 1)], by.x = 'rch', by.y = 'q2kR', all.x = T,
+              all.y = T)
+  
+  dd <- mtrc[['daily']][, c(1, 2, 5, 6)]
+  
+  dd <- melt(dd, id.vars = c('rch', 'dte'), variable.name = 'src',
+             value.name = 'T_7dadm')
+  
+  dd <- merge(dd, rows[, c(3, 4, 1)], by.x = 'rch', by.y = 'q2kR', all.x = T,
+              all.y = F)
+  
+  # ________________________________________________________________________----    
+  # Plot! ----
+  # Time series graphs
+  if (!is.null(adMt)) { # If atmospheric data are specified
+    
+    mtDt <- add_met(adMt = adMt, strD = min(mOut$tme), endD = max(mOut$tme))
+    
+    mtDt <- melt(mtDt, id.vars = c('date', 'rch'), value.name = 'val',
+                 variable.name = 'par')
+    
+    for (i in 2 : length(unique(dt$rch))) { # Don't bother with HW
       
-    cond <- which(dd$rch == rch[i])
-
-    for (j in 3 : 4) {
-      dd[cond, j + 2] <- stats::filter(dd[cond, j], rep(1 / 7, 7), sides = 1)  
+      tmp1 <- dt[which(dt$rch == unique(dt$rch)[i]), c(1 : 4)]
+      
+      tmp2 <- mtDt[which(mtDt$rch == unique(dt$rch)[i]), ]
+      
+      # Create the stream temperature plot
+      plt1 <- ggplot(data = tmp1[which(tmp1$src == 'mod'), ], aes(x = tme, y = tmp)) +
+        geom_line(color = 'darkblue', size = 0.9) +
+        ylab('Temperature (oC)') + scale_y_continuous(limits = c(0, 30)) +
+        theme_bw() + theme(axis.title.x = element_blank(),
+                           plot.margin = margin(l = 0.45, unit = 'cm')) +
+        geom_point(data = tmp1[which(tmp1$src == 'obs'), ], aes(x = tme, y = tmp),
+                   color = 'darkred', size = 0.5)
+      
+      # Create the met data plot
+      plt2 <- ggplot(data = tmp2, aes(x = date, y = val)) + geom_point() +
+        theme_bw() + facet_wrap(. ~par, ncol = 1, scales = 'free')
+      
+      # Merge the two plots
+      plt3 <- grid.arrange(plt1, plt2, ncol = 1, heights = c(1, 4))
+      
+      # Save as png
+      ggsave(filename = paste0(9, addZ(i - 1), '_ts_temp_', unique(dt$rch)[i], '.jpg'),
+             plot = plt3, path = nDir, width = 7.5, height = 10, dpi = 300, units = "in")
+      
     }
     
-  }
-  
-  # Remove all NAs
-  dd <- dd[complete.cases(dd), ]  
-  
-  # ________________________________________________________________________----
-  # Process hourly data - condense model output to hourly ----
-  dt <- dt %>% arrange(rch, tme)
-  
-  temp <- dt[which(dt$src == 'mod'), ]
-  
-  temp$indx <- 1 : nrow(temp)
-  
-  temp$hour <- round_date(temp$tme, 'hour')
-  
-  temp$diff <- abs(temp$hour - temp$tme)  
-  
-  rch <- unique(dt$rch)
-  
-  hrvc <- NULL
-  
-  for (i in 1 : length(rch)) {
+  } else { # If atmospheric data are not specified
     
-    tmp1 <- temp[which(temp$rch == rch[i]), ]; hrs <- unique(temp$hour)
+    # Time series graphs (facet station)
+    plt1 <- ggplot(dat = dt[which(dt$src == 'mod' & dt$rch != 'R00'), ],
+                   aes(x = tme, y = tmp)) + geom_line(color = 'darkblue', size = 0.9) +
+      ylab('Temperature (oC)') + theme_bw() + theme(axis.title.x = element_blank()) +
+      facet_wrap(. ~ rch, ncol = 2, labeller = label_both) +
+      scale_y_continuous(limits = c(5, 30), breaks = seq(0, 30, 5)) +
+      geom_point(data = dt[which(dt$src == 'obs'), ], aes(x = tme, y = tmp),
+                 color = 'darkred', stroke = 1.1, shape = 5, size = 0.5) +
+      geom_line(data = dt[which(dt$src == 'obs'), ], aes(x = tme, y = tmp),
+                size = 0.7, color = 'darkred')
     
-    for (j in 1 : length(hrs)) {
-      
-      tmp2 <- tmp1[which(tmp1$hour == hrs[j]), ]
-      
-      hrvc <- append(hrvc, tmp2[which.min(tmp2$diff), 6])
-      
-    }
-  }
-
-  temp <- temp[hrvc, c(1, 7, 3 : 5)]; names(temp)[2] <- 'tme'
-  
-  dt <- rbind(temp, dt[which(dt$src == 'obs'), ])
-  
-  dt <- dcast(dt[, 1 : 4], rch + tme ~ src, value.var = 'tmp')
-  
-  dt <- dt[complete.cases(dt), ]; names(dt)[2] <- 'dte'
-  
-  rch <- unique(dt$rch)
-  
-  # Calculate Statistics ----
-  # Initiate the data frame to house the statistics
-  mtrc <- data.frame(rch = rch, stringsAsFactors = F) %>%
-          mutate(n_7d = 0, me_7d = 0, mae_7d = 0, rmse_7d = 0,
-                 n_hr = 0, me_hr = 0, mae_hr = 0, rmse_hr = 0, nse_hr = 0)
-  
-  for (i in 1 : length(rch)) {
-    
-    tmp1 <- dt[which(dt$rch == rch[i]), ]; tmp2 <- dd[which(dd$rch == rch[i]), ]
-    
-    # Count
-    mtrc[i, 2] <- nrow(tmp2); mtrc[i, 6] <- nrow(tmp1)    
-    
-    # Mean error
-    mtrc[i, 3] <- me(tmp2$m7dadm, tmp2$o7dadm)   # 7DADM
-    mtrc[i, 7] <- me(tmp1$mod, tmp1$obs)         # Hourly
-    
-    # Mean absolute error
-    mtrc[i, 4] <- mae(tmp2$m7dadm, tmp2$o7dadm)  # 7DADM
-    mtrc[i, 8] <- mae(tmp1$mod, tmp1$obs)        # Hourly
-    
-    # Root mean square error
-    mtrc[i, 5] <- rmse(tmp2$m7dadm, tmp2$o7dadm) # 7DADM
-    mtrc[i, 9] <- rmse(tmp1$mod, tmp1$obs)       # Hourly
-    
-    # Nash-sutcliffe efficiency
-    mtrc[i, 10] <- NSE(tmp1$mod, tmp1$obs, FUN = NULL) # Hourly
-
-  }
-  
-  # Create and format the output object (list of stats df and data dfs)
-  out <- list(metrics = mtrc,
-              daily   = dd,
-              hourly  = dt)
-  
-  # Add rows for reaches with no obs data
-  for (i in 1 : length(out)) {
-
-    adDf <- data.frame(rch = c('R01', 'R09'),
-                       matrix(data = NA, nrow = 2, ncol = length(out[[i]]) - 1),
-                       stringsAsFactors = F); names(adDf) <- names(out[[i]])
-    
-    out[[i]] <- rbind(out[[i]], adDf)
-    
-    if (i == 1) {
-      out[[i]] <- out[[i]] %>% arrange(rch)
-    } else {
-      out[[i]] <- out[[i]] %>% arrange(rch, dte)
-    }
+    ggsave(filename = 'TS_hourly_temp.jpg', dpi = 300, plot = plt1, width = 17,
+           height = 11, path = nDir, units = 'in')
     
   }
-
-  return(out)
-
+  
+  # Plot 7DADM - Time series graphs (facet station)
+  plt1 <- ggplot(data = dd, aes(x = dte, y = T_7dadm, group = src, color = src)) +
+    geom_line(size = 0.9) + ylab('Temp, 7DADM (oC)') + theme_bw() +
+    scale_color_manual(values = c('darkblue', 'darkred')) +
+    scale_y_continuous(limits = c(5, 30), breaks = seq(0, 30, 5)) + 
+    theme(axis.title.x = element_blank()) + facet_wrap(. ~ rch, ncol = 2)
+  
+  ggsave(filename = 'temp_TS_7dadm.jpg', dpi = 300, plot = plt1, width = 17,
+         height = 11, path = nDir, units = 'in')
+  
+  # Output the metrics table
+  write.csv(x = mtrc[[1]], file = paste0(nDir, '/temp_fit_stats.csv'),
+            row.names = F)
+  
 }
-
-add_hspf <- function(strD = NULL, endD = NULL, HSPF = NULL) {
-  
-  library(lubridate)
-  
-  source('d:/siletz/scripts/R/utilities.R')
-  
-  # Convert dates and add a '/' to HSPF directory
-  timeZone <- 'America/Los_Angeles'
-  if (!is.POSIXct(strD)) {strD <- as.POSIXct(strD, '%Y-%m-%d', tz = timeZone)}
-  if (!is.POSIXct(endD)) {endD <- as.POSIXct(endD, '%Y-%m-%d', tz = timeZone)}
-  if (substr(HSPF, nchar(HSPF), nchar(HSPF)) != '/') {HSPF <- paste0(HSPF, '/')}
-  
-  # Pull in the HSPF data
-  temp <- list(noH = readRDS(paste0(HSPF, 'rchQLC_NOx.RData')),
-               tpH = readRDS(paste0(HSPF, 'rchQLC_TP.RData')))
-  
-  # Extract the needed HSPF data
-  hspf <- data.frame(time = temp[['noH']][['rOut_conc']]$Date,
-                     noH  = temp[['noH']][['rOut_conc']]$Bas14,
-                     tpH  = temp[['tpH']][['rOut_conc']]$Bas14)
-  
-  hspf <- hspf[which(hspf$time >= strD & hspf$time <= endD), ]
-
-  # Calculate daily mean values
-  hspf$date <- floor_date(hspf$time, 'day')
-  
-  hspf <- aggregate(x = hspf[, 2 : 3], by = list(hspf$date), FUN = 'mean')
-  
-  names(hspf)[1] <- 'date'
-  
-  # Return output DF
-  return(hspf)
-
-}
-
-# REMOVE OBSERVATIONS (pH only) ----
-# dtes <- c('2017-07-20 15:00', '2017-07-20 16:00', '2017-07-20 17:00')
-# 
-# obs_CW <- remove_obs(dtes = dtes, parm = 'phX', q2kR = '05', obID = obs_CW)
-# 
-# dtes <- c('2017-07-20 17:00', '2017-07-20 18:00')
-# 
-# obs_CW <- remove_obs(dtes = dtes, parm = 'phX', q2kR = '09', obID = obs_CW)
-

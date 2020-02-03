@@ -17,6 +17,7 @@ t_air_q2k <- function(strD = NULL, endD = NULL, shp = NULL, dir = NULL,
   # dir = directory of the prism data
   # tmxt = vector of time of maximum temperature (using minmax_time())
   # tmnt = vector of time of minimum temperature (using minmax_time())
+  # nday = number of warm-up days
 
   library(raster); library(dplyr)
   
@@ -64,7 +65,8 @@ t_air_q2k <- function(strD = NULL, endD = NULL, shp = NULL, dir = NULL,
       for (j in 2 : length(temp)) {
         
         # Calculate a sinusoidal time series between the daily max/min
-        temp[, j] <- calc_sin(mnmx[['min']][i, j - 1], mnmx[['min']][i, j - 1], temp$dates)
+        temp[, j] <- calc_sin(mnmx[['min']][i, j - 1], mnmx[['min']][i, j - 1],
+                              temp$dates)
         
       }
       
@@ -124,7 +126,7 @@ t_air_q2k <- function(strD = NULL, endD = NULL, shp = NULL, dir = NULL,
   airT <- change_dups(airT)
   
   # Fill NAs
-  airT <- airT %>% fill(everything())
+  airT <- airT %>% tidyr::fill(everything())
   
   row.names(airT) <- airT$date; airT <- airT[, -1]; airT <- data.frame(t(airT))
   
@@ -229,7 +231,7 @@ t_dwpnt_q2k <- function(dpts = NULL, strD = NULL, endD = NULL, shp = NULL,
   
   for (i in 2 : length(dwpT)) {dwpT[which(is.nan(dwpT[, i])), i] <- NA} 
   
-  dwpT <- dwpT %>% fill(everything())
+  dwpT <- dwpT %>% tidyr::fill(everything())
   
   row.names(dwpT) <- dwpT$date; dwpT <- dwpT[, -1]; dwpT <- data.frame(t(dwpT))
   
@@ -272,7 +274,7 @@ cloud_q2k <- function(x = NULL, strD = NULL, endD = NULL, nday = NULL) {
   # Fill NAs
   for (i in 2 : length(mDat)) {mDat[which(is.nan(mDat[, i])), i] <- NA} 
   
-  mDat <- mDat %>% fill(everything())
+  mDat <- mDat %>% tidyr::fill(everything())
   
   # Transpose and set col names to row 1
   row.names(mDat) <- mDat$date; mDat <- mDat[, -1]; mDat <- data.frame(t(mDat))
@@ -307,7 +309,7 @@ wind_q2k <- function(x = NULL, strD = NULL, endD = NULL, nday = NULL,
   # fill NAs
   for (i in 2 : length(mDat)) {mDat[which(is.nan(mDat[, i])), i] <- NA} 
   
-  mDat <- mDat %>% fill(everything())
+  mDat <- mDat %>% tidyr::fill(everything())
 
   if (!is.null(mdfr)) {for (i in 2 : length(mDat)) {
       mDat[, i] <- mDat[, i] * mdfr[i - 1] / 100
@@ -418,7 +420,9 @@ calc_sin <- function(t1 = NULL, t2 = NULL, x = NULL) {
   
   x <- pi * (as.numeric(x - min(x)) / 3600) / (length(x) - 1)
   
-  y <- (t2 - t1) / 2 * cos(x) + (t2 + t1) / 2; return(y)
+  y <- (t2 - t1) / 2 * cos(x) + (t2 + t1) / 2;
+  
+  return(y)
   
 }
 
@@ -472,4 +476,27 @@ change_dups <- function(df = NULL) {
 
   return(df)
 
+}
+
+modify_met <- function(df = NULL, strD = NULL, endD = NULL, mdfy = NULL) {
+  
+  df <- data.frame(t(df), stringsAsFactors = F)
+
+  df$date <- as.POSIXct(row.names(df), 'X%Y.%m.%d.%H.%M.%S',
+                        tz = 'America/Los_Angeles')
+  
+  dtes <- as.POSIXct(c(strD, endD), '%Y-%m-%d', tz = 'America/Los_Angeles')
+  
+  cond <- which(df$date >= strD & df$date <= endD)
+  
+  temp <- df[cond, 1 : (length(df) - 1)]
+    
+  for (i in 1 : length(temp)) {temp[, i] <- temp[, i] * mdfy[i] / 100} 
+  
+  df[cond, 1 : (length(df) - 1)] <- temp
+  
+  df <- data.frame(t(df[, 1 : 10]), stringsAsFactors = F)
+  
+  return(df)
+  
 }

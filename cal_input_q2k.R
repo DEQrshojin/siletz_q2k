@@ -4,7 +4,7 @@ source('d:/siletz_q2k/04_scripts/cal_functions_q2k.R')
 
 # ________________________________________________________________________----
 # PROCESS OBSERVATIONS FOR PEST ----
-strD <- '2016-09-10'; endD <- '2017-02-13'
+strD <- '2017-09-08'; endD <- '2017-10-16'
 
 HSPF <- 'D:/siletz/outputs/q2k_noSTP'
 
@@ -26,7 +26,7 @@ df <- add_weights(obs_CW[["obs"]])
 
 df <- df[which(df$grp != 'tmp'), ]
 
-fOut <- 'd:/siletz_q2k/08_pest/05_supp/obs_cw2017_hspf.txt'
+fOut <- 'd:/siletz_q2k/08_pest/05_supp/obs_sp2017_hspf.txt'
 
 output_obs(df = df, fOut = fOut)
 
@@ -55,24 +55,19 @@ rm(list=ls()); cat("\014")
 
 source('d:/siletz_q2k/04_scripts/cal_functions_q2k.R')
 
-strD = '2017-07-07'; endD = '2017-08-28'; i = 1; wudy = NULL
-
-# adMt <- 'D:/siletz_q2k/02_input/ext_temp_0707_0829'
-
-mOut = 'D:/siletz_q2k/08_pest/03_wq'
-
-nDir = 'wq_14'
-
+nDir = 'wq_82'
+dir  = nDir
+mOut = 'D:/siletz_q2k/08_pest/03_wq/01_cw_cal'
+wudy = 4
+strD = '2017-07-11'; endD = '2017-08-29'
 HSPF = 'D:/siletz/outputs/q2k_noSTP'
 
-run_plots(nDir = paste0('test_', 2),                # Name of new directory for figures
-          mOut = 'D:/siletz_q2k/08_pest/03_wq',   # Directory of Q2K output
-          wudy = 21,                                # Specify number of warm-up days
-          strD = '2017-07-07', endD = '2017-08-28', # Start/end of parameterization period
-          adMt = NULL,                              # Add met data to ts plots
-          HSPF = 'D:/siletz/outputs/q2k_noSTP')     # HSPF calibration set
-
-mOut <- 'D:/siletz_q2k/08_pest/02_temp'
+run_plots(nDir = 'wq_82',
+          mOut = 'D:/siletz_q2k/08_pest/03_wq/01_cw_cal',
+          wudy = 4,
+          strD = '2017-07-11', endD = '2017-08-29',
+          adMt = NULL,
+          HSPF = 'D:/siletz/outputs/q2k_noSTP')
 
 oOut <- obs_CW[['obs']][, c(2, 3, 6, 5)]
 
