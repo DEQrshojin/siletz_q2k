@@ -1,42 +1,33 @@
-library(lubridate)
-
 rm(list = ls()); cat('\014')
+
+library(lubridate)
 
 source("D:/siletz_q2k/04_scripts/bcs_functions_q2k.R")
 
-# Cold-water period
-# strD <- '2017-07-07'; endD <- '2017-08-29'
-
-# Spawning period
-strD <- '2017-09-08'; endD <- '2017-10-16'
-
-oDir <- 'D:/siletz_q2k/02_input/wq_sp_valid' # Output director for csv files
-
-iDir <- 'D:/siletz/outputs/q2k_noSTP' # Input HSPF data directory
+# Time period
+# strD <- '2017-07-07'; endD <- '2017-08-29' # Cold-water period
+strD <- '2017-09-08'; endD <- '2017-10-16' # Spawning period
+# Output directory
+oDir <- 'D:/siletz_q2k/02_input/11_updated_WR' # CW .csv Output directory
+# oDir <- 'D:/siletz_q2k/02_input/12_updated_WR' # SP .csv Output directory
+# Input HSPF data directory
+iDir <- 'D:/siletz/outputs/q2k_noSTP' 
 
 # __________________________________________________________________________----
 # INITIALIZE BLANK BC OBJECT ----
 cOut <- init_bcs(strD = strD, endD = endD)
 
-# sOut <- mod_bcs_ss(cOut) # Modify the bc object for steady state R05 & L06
-
 # __________________________________________________________________________----
 # HSPF BC INPUTS ----
 cOut <- hspf_q2k(cOut = cOut, strD = strD, endD = endD, dir = iDir)
-
-# sOut <- hspf_q2k_ss(sOut = sOut, dir = iDir)
 
 # __________________________________________________________________________----
 # LSWCD DATA ----
 cOut <- lswcd_q2k(cOut = cOut, dir = iDir)
 
-# sOut <- lswcd_q2k_ss(sOut = sOut, dir = iDir)
-
 # __________________________________________________________________________----
 # DEQ CONT DATA ----
 cOut <- deq_cont_q2k(cOut = cOut)
-
-# sOut <- deq_cont_q2k_ss(sOut = sOut)
 
 # __________________________________________________________________________----
 # DEQ GRAB DATA ----
@@ -58,7 +49,8 @@ stp <- paste0('//deqhq1/tmdl/TMDL_WR/MidCoast/Models/Dissolved Oxygen/Middle_S',
 # Create cOut_dummy such that the STP loads get processed and writen to csv, but
 # not included in the cOut object. STP will be included as PS, and cOut for B13
 # are non-point source
-cOut <- stp_bcs(cOut = cOut, stp = stp, q2kR = 7, csvOut = NULL)
+cOut <- stp_bcs(cOut = cOut, stp = stp, q2kR = 7,
+                csvOut = 'D:/siletz_q2k/02_input/11_sp_onlySTP')
 
 # __________________________________________________________________________----
 # ADD WARM-UP DAYS ----
@@ -66,20 +58,10 @@ cOut <- add_warm_up(cOut = cOut, nday = 7)
 
 # __________________________________________________________________________----
 # FILL IN NAs ----
-for (i in 1 : length(cOut)) {cOut[[i]] <- cOut[[i]] %>% fill(everything())}
+for (i in 1 : length(cOut)) {cOut[[i]] <- cOut[[i]] %>% tidyr::fill(everything())}
 
 # __________________________________________________________________________----
 # WRITE BCs TO CSV ----
-addSfx <- 'sp_valid'; saveRDS <- 'sp_valid'
+addSfx <- 'sp_WR_only'; saveRDS <- 'sp_WR_only'
 
 write_bcs_q2k(cOut = cOut, oPth = oDir, sveRDS = saveRDS, addSfx = addSfx)
-
-# sOut <- write_bcs_q2k_ss(sOut = sOut, oPth = oDir, sveRDS = saveRDS,
-#                          addSfx = addSfx)
-
-# rm(list = ls())
-# 
-# dir = 'D:/siletz_q2k/02_input/ss_wSTP_20191126'
-# 
-# sOut <- recombine_ss_bsc(dir = 'D:/siletz_q2k/02_input/ss_wSTP_20191126')
-

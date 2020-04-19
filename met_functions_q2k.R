@@ -43,7 +43,8 @@ t_air_q2k <- function(strD = NULL, endD = NULL, shp = NULL, dir = NULL,
     
     rast <- list(min = raster(rfmn[i]), max = raster(rfmx[i]))
     
-    for (j in 1 : 2) {mnmx[[j]] = rbind(mnmx[[j]], extract(rast[[j]], shp))}
+    for (j in 1 : 2) {mnmx[[j]] = rbind(mnmx[[j]],
+                                        raster::extract(rast[[j]], shp))}
     
   }
   
@@ -117,10 +118,10 @@ t_air_q2k <- function(strD = NULL, endD = NULL, shp = NULL, dir = NULL,
   }
 
   # Remove the indirect input columns
-  airT <- airT[, c(1, 4, 7, 8, 9, 12, 13, 14, 15, 16, 17)]
+  # airT <- airT[, c(1, 4, 7, 8, 9, 12, 13, 14, 15, 16, 17)]
   
   # Add warm up days if nday = real number
-  if (!is.null(nday)) {airT <- add_warm_up(df = airT, nday = nday)}
+  # if (!is.null(nday)) {airT <- add_warm_up(df = airT, nday = nday)}
   
   # Remove duplicate datetimes
   airT <- change_dups(airT)
@@ -128,7 +129,7 @@ t_air_q2k <- function(strD = NULL, endD = NULL, shp = NULL, dir = NULL,
   # Fill NAs
   airT <- airT %>% tidyr::fill(everything())
   
-  row.names(airT) <- airT$date; airT <- airT[, -1]; airT <- data.frame(t(airT))
+  # row.names(airT) <- airT$date; airT <- airT[, -1]; airT <- data.frame(t(airT))
   
   return(airT)
   
@@ -172,38 +173,48 @@ t_dwpnt_q2k <- function(dpts = NULL, strD = NULL, endD = NULL, shp = NULL,
   # List the folders and files for min/max T
   if (substr(dir, nchar(dir), nchar(dir)) != '/') {dir <- paste0(dir, '/')}
   
-  for (i in unique(year(dtes))) {
-    # Use the shifted PRISM dates (dte2)
-    rfdp <- paste0(dir, 'yr_', i, '/PRISM_tdmean_stable_4kmD1_',
-                   format(dte2, '%Y%m%d'), '_bil.asc')  
+  yrs <- unique(year(dtes))
+  
+  rfdp <- NULL
+  
+  for (i in 1 : length(yrs)) {
+    tmp1 <- dte2[which(year(dte2) == yrs[i])]
+    tmp2 <- paste0(dir, 'yr_', yrs[i], '/PRISM_tdmean_stable_4kmD1_',
+                   format(tmp1, '%Y%m%d'), '_bil.asc')
+    rfdp <- append(rfdp, tmp2)
   }
   
   # Set up data frame shell for the basin specific mean dewpoint T (with correct dates)
-  bmdp <- data.frame(date = dtes, matrix(data = 0, ncol = length(shp), nrow = length(dtes)))
-  
+  # bmdp <- data.frame(date = dtes, matrix(data = 0, ncol = length(shp), nrow = length(dtes)))
+  #
   # Populate data frame
-  for (i in 1 : length(rfdp)) {
-    
-    rast <- raster(rfdp[i])
-    
-    bmdp[i, 2 : (length(shp) + 1)] = extract(rast, shp)
-    
-  }
+  # for (i in 1 : length(rfdp)) {
+  #   
+  #   rast <- raster(rfdp[i])
+  #   
+  #   bmdp[i, 2 : (length(shp) + 1)] = raster::extract(rast, shp)
+  #   
+  # }
+  
+  bmdp <- readRDS(paste0('D:/siletz_TMDL/01_inputs/02_q2k/RData/PRISM_mean_dai',
+                         'ly_T_dwp_2004_2017.RData'))
   
   # Rename columns
-  names(bmdp) <- c('date', paste0('B', 1 : length(shp)))
+  # names(bmdp) <- c('date', paste0('B', 1 : length(shp)))
   
   # Rename columns of dewpoint time series
   names(dpts) <- c('date', 'tdpC')
-  
+
   # 1) Calculate mean daily T_dwp for the dewpoint time series
   mdwp <- aggregate(dpts$tdpC, by = list(floor_date(dpts$date, unit = 'day')),
-                    FUN = mean)  
+                    FUN = mean, na.rm = T)  
   
   # 2) Subtract mean daily T_dwp @ basin from T_dwp @ Nwp (mean dailys)
   for (i in 1 : nrow(bmdp)) {
     bmdp[i, 2 : (length(shp) + 1)] <- mdwp[i, 2] - bmdp[i, 2 : (length(shp) + 1)]
   }
+  
+  bmdp$date <- floor_date(x = bmdp$date, unit = 'days')
   
   # 2) Subtract that difference from the T_dwp @ Nwp (time series) for each basin
   # Set up the data frame for the time series data
@@ -213,7 +224,7 @@ t_dwpnt_q2k <- function(dpts = NULL, strD = NULL, endD = NULL, shp = NULL,
   dwpT <- data.frame(datetime = dtes,
                      date = floor_date(dtes, unit = 'day'),
                      tdpC = dpts$tdpC)
-  
+
   dwpT <- merge(dwpT, bmdp, by.x = 'date', by.y = 'date', all.x = T)
   
   for (i in 4 : length(dwpT)) {dwpT[, i] <- dwpT[, 3] - dwpT[, i]}
@@ -221,10 +232,10 @@ t_dwpnt_q2k <- function(dpts = NULL, strD = NULL, endD = NULL, shp = NULL,
   dwpT <- dwpT[, -c(1, 3)]
   
   # Remove indirect input columns and transpose
-  dwpT <- dwpT[, c(1, 4, 7, 8, 9, 12, 13, 14, 15, 16, 17)]
+  # dwpT <- dwpT[, c(1, 4, 7, 8, 9, 12, 13, 14, 15, 16, 17)]
   
   # Add warm up days if nday = real number
-  if (!is.null(nday)) {dwpT <- add_warm_up(df = dwpT, nday = nday)}
+  # if (!is.null(nday)) {dwpT <- add_warm_up(df = dwpT, nday = nday)}
   
   # Remove duplicate datetimes
   dwpT <- change_dups(dwpT)
@@ -236,7 +247,7 @@ t_dwpnt_q2k <- function(dpts = NULL, strD = NULL, endD = NULL, shp = NULL,
   row.names(dwpT) <- dwpT$date; dwpT <- dwpT[, -1]; dwpT <- data.frame(t(dwpT))
   
   # Check the dewpoint T >= air T. Set equal to air T if greater than.
-  for (i in 1 : length(dwpT)) {
+  for (i in 2 : length(dwpT)) {
     
     dwpT[, i] <- ifelse(dwpT[, i] < airT[, i], dwpT[, i], airT[, i])
     
@@ -441,26 +452,6 @@ plot_temps <- function(df = NULL) {
   
   return(plot)
   
-}
-
-add_warm_up <- function(df = NULL, nday = NULL) {
-  
-  # Rename the dates column for consistency
-  names(df)[1] <- 'date'
-  
-  # Chunk out the first day
-  temp <- df[1 : 24, ]
-  
-  # Create the data frame of repeating first days
-  for (i in 1 : (nday - 1)) {temp <- rbind(temp, df[1 : 24, ])}
-  
-  df <- rbind(temp, df)
-  
-  # Recalculate the date/times of each data-frame
-  df$date <- seq(df$date[1] - nday * 86400, df$date[nrow(df)], 3600)
-  
-  return(df)
-
 }
 
 change_dups <- function(df = NULL) {

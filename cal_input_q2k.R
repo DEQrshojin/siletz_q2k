@@ -4,7 +4,7 @@ source('d:/siletz_q2k/04_scripts/cal_functions_q2k.R')
 
 # ________________________________________________________________________----
 # PROCESS OBSERVATIONS FOR PEST ----
-strD <- '2017-09-08'; endD <- '2017-10-16'
+strD <- '2017-07-11'; endD <- '2017-08-29'
 
 HSPF <- 'D:/siletz/outputs/q2k_noSTP'
 

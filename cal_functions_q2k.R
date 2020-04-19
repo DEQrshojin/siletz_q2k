@@ -1,7 +1,6 @@
 # ________________________________________________________________________----
-# CORE OUTPUT FUNCTIONS
-
-# CREATE PEST OBS OBJECT ----
+# CORE CALIBRATION FUNCTIONS ----
+# ________________________________________________________________________----
 obs4PEST <- function(strD = NULL, endD = NULL, HSPF = NULL) {
   
   # This function creates an observations object (list) for use in PEST based 
@@ -11,26 +10,26 @@ obs4PEST <- function(strD = NULL, endD = NULL, HSPF = NULL) {
   # Input the start and end dates for the output file; Also creates an output
   # dataframe that is to be used in collated the model output data file.
   
-  # ________________________________________________________________________----
-  # Libraries, Functions and Objects----
+  # ________________________________________________________________________
+  # Libraries, Functions and Objects
   suppressMessages(library(reshape2)); suppressMessages(library(dplyr))
   
-  # ________________________________________________________________________----
-  # Load And Process Data----  
+  # ________________________________________________________________________
+  # Load And Process Data
   # Load observation data
   d <- load_obs(strD, endD, HSPF = HSPF)[2 : 6] # Don't need Q data
   
   # Load reach and station links
   rows <- read.csv('D:/siletz_q2k/05_calib/rhdr.csv', stringsAsFactors = F)
   
-  # ________________________________________________________________________----
-  # Create A Master Keys Of Observation IDs, this will be reduced later ----
+  # ________________________________________________________________________
+  # Create A Master Keys Of Observation IDs, this will be reduced later 
   obID <- create_key(strD = strD, endD = endD)
   
   max <- nrow(obID)
   
-  # ________________________________________________________________________----  
-  # Process LSWCD Data----
+  # ________________________________________________________________________  
+  # Process LSWCD Data
   # Remove non-calibration stations, including confluence (cause it's used as BC)
   stns <- c(38944, 36367, 38300, 10391, 37848, 38918, 38928, 11246, 37396)
   
@@ -66,8 +65,8 @@ obs4PEST <- function(strD = NULL, endD = NULL, HSPF = NULL) {
     
   }
   
-  # ________________________________________________________________________----
-  # DEQ Continuous Data----
+  # ________________________________________________________________________
+  # DEQ Continuous Data
   deqC <- d[['deqC']][which(d[['deqC']]$pH >= 6.5), c(13, 8, 3)]
   
   # Tidy up
@@ -91,8 +90,8 @@ obs4PEST <- function(strD = NULL, endD = NULL, HSPF = NULL) {
   
   l <- rbind(l, deqC)
   
-  # ________________________________________________________________________----
-  # StreamMetabolizer Reaeration Data----
+  # ________________________________________________________________________
+  # StreamMetabolizer Reaeration Data
   k600 <- d[['k600']]; k600 <- k600[-which(k600$STA == '37848'), ] # STA 37848 = bad data!
 
   # Two seemingly anomolous results in Reach 7 (> 250/d)
@@ -115,8 +114,8 @@ obs4PEST <- function(strD = NULL, endD = NULL, HSPF = NULL) {
   
   l <- rbind(l, k600)
   
-  # ________________________________________________________________________----
-  # Use HSPF model NOx and TP data at STA 10391 - Daily means: NO3 and TP ----
+  # ________________________________________________________________________
+  # Use HSPF model NOx and TP data at STA 10391 - Daily means: NO3 and TP 
   hspf <- d[['hspf']]
   
   # Add the reach number
@@ -132,8 +131,8 @@ obs4PEST <- function(strD = NULL, endD = NULL, HSPF = NULL) {
   
   l <- rbind(l, hspf[, c(2, 1, 4, 5)])
 
-  # ________________________________________________________________________----
-  # Merge, Record and Clean Data ----
+  # ________________________________________________________________________
+  # Merge, Record and Clean Data 
   obID <- merge(obID, l, by.x = 'obID', by.y = 'obID', all.x = T)
   
   # Clean up and rename columns
@@ -147,8 +146,8 @@ obs4PEST <- function(strD = NULL, endD = NULL, HSPF = NULL) {
   
   obID <- obID[-which(is.na(obID$val)), ]
   
-  # ________________________________________________________________________----
-  # DEQ Grab Data----
+  # ________________________________________________________________________
+  # DEQ Grab Data
   # Pull out Date, station, NO3, TP, TOC, CBOD and Chl a in that order 
   deqG <- d[['deqG']][, c(23, 2, 9, 10, 17, 18, 11, 12, 5, 6, 21, 22)]
   
@@ -210,8 +209,8 @@ obs4PEST <- function(strD = NULL, endD = NULL, HSPF = NULL) {
   # Bind the data
   obID <- rbind(obID, deqG)
 
-  # ________________________________________________________________________----
-  # Add group data and output observations object ----
+  # ________________________________________________________________________
+  # Add group data and output observations object 
   
   # Add the group, package up and return
   obID$grp <- substr(x = obID$obID, start = 4, stop = 6)
@@ -220,7 +219,8 @@ obs4PEST <- function(strD = NULL, endD = NULL, HSPF = NULL) {
   
 }
 
-# FORMAT OBS AND OUTPUT TO FILE FOR .PST ----
+# ________________________________________________________________________----
+# FORMAT OBS AND OUTPUT TO FILE FOR .PST 
 output_obs <- function(df = NULL, fOut = NULL) {
   
   # This function takes a data frame of observations (with ID, Grp, and Val) and 
@@ -240,7 +240,8 @@ output_obs <- function(df = NULL, fOut = NULL) {
   }
 }
 
-# CREATE PEST INSTRUCTION FILE ----
+# ________________________________________________________________________----
+# CREATE PEST INSTRUCTION FILE 
 ins4PEST <- function(obID = NULL, iOut = NULL) {
   
   # This function also creates the instruction file that PEST uses to access the
@@ -251,7 +252,8 @@ ins4PEST <- function(obID = NULL, iOut = NULL) {
   
 }
 
-# CREATE PEST MOD OBJECT ----
+# ________________________________________________________________________----
+# CREATE PEST MOD OBJECT 
 mod4PEST <- function(mOut = NULL, obID = NULL, strD = NULL, fOut = NULL,
                      wudy = NULL) {
   
@@ -262,8 +264,8 @@ mod4PEST <- function(mOut = NULL, obID = NULL, strD = NULL, fOut = NULL,
   # 4) Writes the data to file to be read by the PEST instruction file
   # Specify: output file directory (mOut) and the observations IDs (obID) 
   
-  # ________________________________________________________________________----  
-  # Load and process model data ----
+  # ________________________________________________________________________  
+  # Load and process model data 
   suppressMessages(library(dplyr)); suppressMessages(library(reshape2))
   suppressMessages(library(lubridate))
     
@@ -339,7 +341,7 @@ mod4PEST <- function(mOut = NULL, obID = NULL, strD = NULL, fOut = NULL,
   
   dt <- dt %>% arrange(ord, q2kR, date) 
   
-  # ________________________________________________________________________----
+  # ________________________________________________________________________
   # CREATE THE OUTPUT (.out) FILE
   xOut <- paste0(dt$obID, '  ', format(dt$val, digits = 10, scientific = T))
   
@@ -347,7 +349,8 @@ mod4PEST <- function(mOut = NULL, obID = NULL, strD = NULL, fOut = NULL,
 
 }
 
-# CREATE OUPUT PLOTS ----
+# ________________________________________________________________________----
+# CREATE OUPUT PLOTS 
 run_plots <- function(nDir = NULL, mOut = NULL, wudy = NULL, strD = NULL,
                       endD = NULL, adMt = NULL, HSPF = NULL) {
   
@@ -373,7 +376,8 @@ run_plots <- function(nDir = NULL, mOut = NULL, wudy = NULL, strD = NULL,
 
 }
 
-# WATER QUALITY CALIBRATION FUNCTIONS ----
+# ________________________________________________________________________----
+# WATER QUALITY CALIBRATION FUNCTIONS 
 cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
                      wudy = NULL) {
   
@@ -384,13 +388,13 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
   suppressMessages(library(ggplot2)); suppressMessages(library(lubridate))
   suppressMessages(library(reshape2))
   
-  # ________________________________________________________________________----    
-  # Load and organize the data ----
+  # ________________________________________________________________________    
+  # Load and organize the data 
   # Bring in station reach match
   rows <- read.csv('D:/siletz_q2k/05_calib/rhdr.csv', stringsAsFactors = F)
   
-  # ________________________________________________________________________----
-  # Process model data ----
+  # ________________________________________________________________________
+  # Process model data 
   mOut <- read_q2k_out(mOut)
   
   mOut <- mOut[, c(  1,   3,   4,   7,  24,  59,  12,  31,  35,   9,  15)]
@@ -416,8 +420,8 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
   mOut <- melt(mOut, id.vars = c('tme', 'rch'), variable.name = 'par',
                value.name = 'val'); mOut$par <- as.character(mOut$par)
   
-  # ________________________________________________________________________----
-  # Process observations ----
+  # ________________________________________________________________________
+  # Process observations 
   names(oOut) <- c('tme', 'rch', 'par', 'val'); oOut$rch <- as.numeric(oOut$rch)
   
   # Seperate the HSPF data and monitoring data
@@ -425,16 +429,16 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
 
   oOut <- oOut[-which(oOut$par %in% c('noH', 'tpH')), ]
 
-  # ________________________________________________________________________----
-  # Prep combined data for plotting ----
+  # ________________________________________________________________________
+  # Prep combined data for plotting 
   # Create a column in both for source (model/observation); bind the tables
   mOut$src <- 'mod'; oOut$src <- 'obs'; dt <- rbind(mOut, oOut)
   
   # Fix TP and pH for Obs -- switch x w/ X 
   dt$par <- ifelse(dt$par == 'tpx', 'tpX', ifelse(dt$par == 'phx', 'phX', dt$par))
   
-  # ________________________________________________________________________----
-  # Send dt out for error statistics and calculations ----
+  # ________________________________________________________________________
+  # Send dt out for error statistics and calculations 
   mtrc <- wq_metrics(dt = dt, dir = nDir)
 
   # Parameter switch
@@ -491,14 +495,25 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
     }
   }
 
-  # ________________________________________________________________________----    
-  # Plot ----
-  lims <- data.frame(pars = c('bod', 'cha', 'doc', 'nox', 'phX', 'rea', 'tmp',
-                              'toc', 'tpX'),
-                     ymin = c( 0.00,  0.00,  5.00,  0.00,  6.00,  0.00,   5.0,
-                               0.00,  0.00),
-                     ymax = c( 1.00,  0.80,  15.0,  1.00, 12.00,  20.0,  30.0,
-                               2.50,  0.15))
+  # ________________________________________________________________________    
+  # Plot 
+  strD <- as.POSIXct(strD, '%Y-%m-%d', tz = 'America/Los_Angeles')
+  coDt <- as.POSIXct('2017-09-01', '%Y-%m-%d', tz = 'America/Los_Angeles')
+  
+  if (strD <= coDt) {
+    lims <- data.frame(
+      pars = c('bod', 'cha', 'doc', 'nox', 'phX', 'rea', 'tmp', 'toc', 'tpX'),
+      ymin = c( 0.00,  0.00,  5.00,  0.00,  6.00,  0.00,   5.0,  0.00,  0.00),
+      ymax = c( 1.00,  0.80,  15.0,  0.50, 12.00,  20.0,  30.0,  2.50,  0.05)
+    )    
+  } else {
+    lims <- data.frame(
+      pars = c('bod', 'cha', 'doc', 'nox', 'phX', 'rea', 'tmp', 'toc', 'tpX'),
+      ymin = c( 0.00,  0.00,  5.00,  0.00,  6.00,  0.00,   5.0,  0.00,  0.00),
+      ymax = c( 1.00,  0.80,  15.0,  1.00, 12.00,  20.0,  30.0,  2.50,  0.15)
+    )
+  }
+  
 
   for (i in 1 : length(unique(dt$par))) {
     
@@ -554,7 +569,7 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
       }
 
       plt2 <- ggplot(dat = ddMB) + ylab(paste0(pars[i, 2], ' (', pars[i, 3], ')')) +
-              xlab('River Mile') + theme_bw() + facet_wrap(.~ dte, ncol = 2) +
+              xlab('River Kilometer') + theme_bw() + facet_wrap(.~ dte, ncol = 2) +
               scale_y_continuous(limits = c(lims$ymin[i], lims$ymax[i])) + 
               geom_line(aes(x = dst, y = mean, color = 'darkblue')) +
               geom_ribbon(aes(x = dst, ymin = ddMB$min, ymax = ddMB$max,
@@ -587,8 +602,8 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
     }
   }
 
-  # ________________________________________________________________________----
-  # HSPF nutrient data ----
+  # ________________________________________________________________________
+  # HSPF nutrient data 
   # Isolate reach 8 and NO3 and TP data
   mNut <- mOut[which(mOut$rch == 8 & mOut$par %in% c('tpX', 'nox')), ]
 
@@ -627,8 +642,9 @@ cal_supp <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
     }
 
 # ________________________________________________________________________----
-# SUPPLEMENTAL OUTPUT FUNCTIONS
-# READ Q2K OUTPUT ----
+# SUPPLEMENTAL OUTPUT FUNCTIONS ----
+# ________________________________________________________________________----
+# READ Q2K OUTPUT 
 read_q2k_out <- function(mOut = NULL) {
   
   # Function that reads 
@@ -664,7 +680,7 @@ read_q2k_out <- function(mOut = NULL) {
   
 }
 
-# LOAD OBS DATA 4 Q2KW CAL (PEST OR AUTOCAL) ----
+# LOAD OBS DATA 4 Q2KW CAL (PEST OR AUTOCAL) 
 load_obs <- function(strD = NULL, endD = NULL, HSPF = NULL) {
 
   # Returns a list of 5 data frames with the following observation data:
@@ -755,7 +771,7 @@ load_obs <- function(strD = NULL, endD = NULL, HSPF = NULL) {
 
 }
   
-# ADD OBJ FUN (PEST) WEIGHTS TO OBS ----
+# ADD OBJ FUN (PEST) WEIGHTS TO OBS 
 add_weights <- function(df = NULL) {
 
   # This function adds observation objective function weights to a dataframe
@@ -791,7 +807,7 @@ add_weights <- function(df = NULL) {
   
 }
 
-# CREATE MASTER KEY ----
+# CREATE MASTER KEY 
 create_key <- function(strD = NULL, endD = NULL) {
   
   # This function creates a master observation ID key set for DO, temperature
@@ -849,7 +865,7 @@ create_key <- function(strD = NULL, endD = NULL) {
   
 }
 
-# ADD A LEADING ZERO ----
+# ADD A LEADING ZERO 
 addZ <- function(v) {
   
   # Function to add a leading 0 to a vector of #s if a number is less than 10
@@ -860,7 +876,7 @@ addZ <- function(v) {
   
 }
 
-# REMOVE OBS ----
+# REMOVE OBS 
 remove_obs <- function(dtes = NULL, parm = NULL, q2kR = NULL, obID = NULL) {
   
   # Removes observations from the observation object and creates a third df
@@ -902,8 +918,8 @@ wq_metrics <- function(dt = NULL, dir = NULL) {
   
   library(lubridate); library(dplyr); library(reshape2); library(hydroGOF)
   
-  # ________________________________________________________________________----
-  # Process hourly data - condense model output to hourly ----
+  # ________________________________________________________________________
+  # Process hourly data - condense model output to hourly 
   dt <- dt %>% arrange(par, rch, tme)
   
   temp <- dt[which(dt$src == 'mod'), ]
@@ -936,9 +952,6 @@ wq_metrics <- function(dt = NULL, dir = NULL) {
     }
   }
 
-  tempBU <- temp
-  temp <- tempBU
-  
   # Isolate those model data in the temp df
   temp <- temp[hrvc, c(7, 2 : 5)]; names(temp)[1] <- 'tme'; 
   
@@ -951,11 +964,11 @@ wq_metrics <- function(dt = NULL, dir = NULL) {
 
   rch <- unique(dt$rch)
   
-  # Calculate Statistics ----
+  # Calculate Statistics 
   # Initiate the data frame to house the statistics
   temp <- data.frame(rch = c(rch, 'tot'), stringsAsFactors = F) %>%
-          mutate(n_hr  = 0, me_hr = 0, mae_hr = 0, rmse_hr = 0, nse_hr = 0,
-                 r2_hr = 0, m_hr  = 0, b_hr   = 0, pm_hr   = 0, pb_hr  = 0)
+          mutate(n_hr = 0, pbias_hr = 0, me_hr = 0, mae_hr = 0, rmse_hr = 0,
+                 nse_hr = 0, r2_hr = 0, m_hr = 0, b_hr = 0, pm_hr = 0, pb_hr = 0)
 
   labs <- c('CBOD', 'Chl-a', 'DO', "NO3", "pH", "Reaer", "Temp", "TOC", "TP")
   
@@ -1045,17 +1058,18 @@ rename_files <- function(dir = NULL, name = NULL) {
 
 run_error_stats <- function(indc = NULL, rspn = NULL) {
 
-  # Pass two vectors (equal length); return vector of n, mean error,
+  # Pass two vectors (equal length); return vector of n, percent error, mean error,
   # mean absolute error, RMSE, NSE, and correlation with pstats if specified
 
-  if (is.null(indc) & is.null(rspn)) {outV <- rep(NA, 10)} else {
+  if (is.null(indc) & is.null(rspn)) {outV <- rep(NA, 11)} else {
 
     # Calculate the statistics
-    outV <- c(length(indc),                # n
-              me(indc, rspn),              # Mean error
-              mae(indc, rspn),             # MAE
-              rmse(indc, rspn),            # RMSE
-              suppressWarnings(NSE(indc, rspn, FUN = NULL))) # NSE
+    outV <- c(length(indc),                                              # n
+              mean(abs(indc - rspn) / indc),                             # PBIAS
+              me(sim = rspn, obs = indc),                                # Mean error
+              mae(sim = rspn, obs = indc),                               # MAE
+              rmse(sim = rspn, obs = indc),                              # RMSE
+              suppressWarnings(NSE(sim = rspn, obs = indc, FUN = NULL))) # NSE
     
     if (!length(indc) == 0) {
       
@@ -1079,13 +1093,13 @@ run_error_stats <- function(indc = NULL, rspn = NULL) {
   
 }
 
-# CALCULATE METRICS FOR TEMPERATURE CALIBRATION - HOURLY AND 7DADM MODEL ----
+# CALCULATE METRICS FOR TEMPERATURE CALIBRATION - HOURLY AND 7DADM MODEL 
 temp_metrics <- function(dt = NULL) {
   
   library(lubridate); library(dplyr); library(reshape2); library(hydroGOF)
   
-  # ________________________________________________________________________----
-  # Calculate 7DADM (new data frame) ----
+  # ________________________________________________________________________
+  # Calculate 7DADM (new data frame) 
   dt$dte <- floor_date(dt$tme, 'day')
   
   # Aggregate to daily max temperature
@@ -1112,8 +1126,8 @@ temp_metrics <- function(dt = NULL) {
   # Remove all NAs
   dd <- dd[complete.cases(dd), ]  
   
-  # ________________________________________________________________________----
-  # Process hourly data - condense model output to hourly ----
+  # ________________________________________________________________________
+  # Process hourly data - condense model output to hourly 
   dt <- dt %>% arrange(rch, tme)
   
   temp <- dt[which(dt$src == 'mod'), ]
@@ -1151,7 +1165,7 @@ temp_metrics <- function(dt = NULL) {
   
   rch <- unique(dt$rch)
   
-  # Calculate Statistics ----
+  # Calculate Statistics 
   # Initiate the data frame to house the statistics
   mtrc <- data.frame(rch = rch, stringsAsFactors = F) %>%
           mutate(n_7d = 0, me_7d = 0, mae_7d = 0, rmse_7d = 0,
@@ -1206,7 +1220,7 @@ temp_metrics <- function(dt = NULL) {
   
 }
 
-# Q-V-W HEATSOURCE RATING CURVE ----
+# Q-V-W HEATSOURCE RATING CURVE 
 rating_curves <- function(df = NULL, par = NULL, file = NULL, trns = NULL) {
   
   # Arguements: data frame of velocity and flow data
@@ -1301,7 +1315,7 @@ rating_curves <- function(df = NULL, par = NULL, file = NULL, trns = NULL) {
   
 }
 
-# ADD METEOROLOGIC DATA FOR TEMPERATUYRE ----
+# ADD METEOROLOGIC DATA FOR TEMPERATUYRE 
 add_met <- function(adMt = NULL, strD = NULL, endD = NULL) {
   
   suppressMessages(library(reshape2))
@@ -1350,7 +1364,7 @@ add_met <- function(adMt = NULL, strD = NULL, endD = NULL) {
   
 }
 
-# WATER QUALITY CALIBRATION FUNCTIONS ----
+# WATER QUALITY CALIBRATION FUNCTIONS 
 cal_supp_T <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
                        wudy = NULL, adMt = NULL) {
   
@@ -1363,8 +1377,8 @@ cal_supp_T <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
   suppressMessages(library(cowplot)); suppressMessages(library(ggpubr));
   suppressMessages(library(gridExtra)); suppressMessages(library(reshape2))
   
-  # ________________________________________________________________________----    
-  # Load and organize the data ----
+  # ________________________________________________________________________    
+  # Load and organize the data 
   # Model data first!
   mOut <- read_q2k_out(mOut)
   
@@ -1394,12 +1408,12 @@ cal_supp_T <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
   # Add a leading "R" to the reaches (for cosmetic & consistency purposes only)
   dt$rch <- paste0("R", dt$rch)
   
-  # ________________________________________________________________________----    
-  # Calculate calibration metrics ----
+  # ________________________________________________________________________    
+  # Calculate calibration metrics 
   mtrc <- temp_metrics(dt = dt)
   
-  # ________________________________________________________________________----    
-  # Prep for plotting ----
+  # ________________________________________________________________________    
+  # Prep for plotting 
   # Bring in station reach match with RM for plotting
   rows <- read.csv('D:/siletz_q2k/05_calib/rhdr.csv', stringsAsFactors = F)
   
@@ -1416,8 +1430,8 @@ cal_supp_T <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
   dd <- merge(dd, rows[, c(3, 4, 1)], by.x = 'rch', by.y = 'q2kR', all.x = T,
               all.y = F)
   
-  # ________________________________________________________________________----    
-  # Plot! ----
+  # ________________________________________________________________________    
+  # Plot! 
   # Time series graphs
   if (!is.null(adMt)) { # If atmospheric data are specified
     
@@ -1487,3 +1501,4 @@ cal_supp_T <- function(strD = NULL, mOut = NULL, oOut = NULL, nDir = NULL,
             row.names = F)
   
 }
+
