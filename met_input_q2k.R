@@ -115,5 +115,6 @@ for (i in 1 : 2) {
               file = paste0(ctrF$oDir, dirV[5], '/', nNme$name, '_eShd_',
                             itrs$seas[i],'.csv'))
 
-  }
+  } else {copy_inputs(inpt = 'ES', scnN = nNme$name, scnO = ctrF$sOld)}
+  
 }  

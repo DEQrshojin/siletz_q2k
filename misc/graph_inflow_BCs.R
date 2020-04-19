@@ -70,7 +70,7 @@ library(reshape2); library(ggplot2)
 # strS <- c('2017-09-01', '2017-09-01', '2014-09-01', '2015-09-01', '2014-09-01',
 #           '2014-09-01', '2005-09-01', '2007-09-01', '2012-09-01')
 
-scen <- 'scen_022'; strC <- '2004-07-07'; strS <- '2004-09-01'; n = 1
+scen <- 'scen_031'; strC <- '2007-07-07'; strS <- '2007-09-01'; n = 1
 
 # Graph lateral catchment inflows
 for (n in 1 : length(scen)) {
@@ -157,6 +157,7 @@ for (n in 1 : length(scen)) {
            height = 11, dpi = 300, units = "in")
     
   }
+
 }
 
 

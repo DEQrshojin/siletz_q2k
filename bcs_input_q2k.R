@@ -51,17 +51,18 @@ for (i in 1 : 2) {
     if (year(dtes[1]) == 2017) { # 2017 DATA
       
       cOut <- lswcd_q2k(cOut = cOut, dir = ctrF$iDir, nme = nme) 
-      
-      cOut <- deq_cont_q2k(cOut = cOut) # DEQ CONT DATA  
-      
-    } else { # Air T corr for years other than 2017
 
-      # Estimate stream T and DO from air T
+    } else if (year(dtes[1]) == 2004) { # From 2004 CTSI temperature data
+
+      cOut <- ctsi_q2k(cOut = cOut, dir = ctrF$iDir, nme = nme)
+
+    } else { # Min/Max Air T corr for years other than 2004 & 2017
+
       cOut <- airT_corr_q2k(cOut = cOut, dir = ctrF$iDir, nme = nme) 
       
-      cOut <- deq_cont_q2k(cOut = cOut) # DEQ CONT DATA 
-       
     }
+    
+    cOut <- deq_cont_q2k(cOut = cOut) # DEQ CONT DATA
 
     cOut <- deq_grab_q2k(cOut = cOut) # DEQ GRAB DATA
     

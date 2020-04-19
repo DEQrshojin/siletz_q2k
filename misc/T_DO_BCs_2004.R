@@ -1,5 +1,62 @@
 rm(list = ls()); cat('\014')
 
+df <- readRDS("C:/siletz_tmdl/05_misc/figures/t_corr/2004_ctsi/t_corr_data.RData")
+
+source("C:/siletz_tmdl/04_scripts/02_q2k/02_R/bcs_functions_q2k.R")
+
+df <- df[['tmpW']]
+
+library(ggplot2)
+
+windows(12, 12)
+
+pl <- ggplot(df, aes(date, tmpC)) + geom_line() + theme_classic() + facet_wrap(.~ stns, ncol = 4); pl
+
+df$dsO2 <- do_sat(temp = df$tmpC, elev = df$elev)
+
+temp <- reshape2::dcast(df, date ~ stns, value.var = 'tmpC', fun.aggregate = mean)
+
+dsO2 <- reshape2::dcast(df, date ~ stns, value.var = 'dsO2', fun.aggregate = mean)
+
+temp <- temp[, -which(names(temp) == 'SRCTS')]; dsO2 <- dsO2[, -which(names(dsO2) == 'SRCTS')]
+
+# Now bring in the estimated data to fill in times where CTSI data don't exist
+df <- readRDS('C:/siletz_tmdl/01_inputs/02_q2k/RData/T_strm_BCs_2004_2017.RData')
+
+tmp2 <- df[["temp"]]; dO22 <- df$DO
+
+tmp2 <- tmp2[which(tmp2$date %in% temp$date), ]
+
+dO22 <- dO22[which(dO22$date %in% temp$date), ]
+
+tmpF <- dO2F <- temp # flag DFs for estimated/measured data 
+
+for (i in 2 : length(temp)) {
+  
+  colm <- which(names(tmp2) == names(temp)[i])
+  
+  tmpF[, i] <- is.nan(temp[, i]); dO2F <- is.nan(dsO2[, i])
+  
+  temp[, i] <- ifelse(is.nan(temp[, i]), tmp2[, i], temp[, i])
+  
+  dsO2[, i] <- ifelse(is.nan(dsO2[, i]), dO22[, i], dsO2[, i])
+  
+}
+ 
+oOut <- list(flags = list(temp = tmpF, dsO2 = dO2F),
+             dsO2  = dsO2,
+             temp  = temp,
+             sites = df$sites)
+
+saveRDS(oOut, 'C:/siletz_tmdl/01_inputs/02_q2k/RData/ctsi_T_DO_2004.RData')
+
+
+
+
+
+
+
+
 frmt <- '%Y-%m-%d'; tz = 'America/Los_Angeles'
 
 dtes <- data.frame(perd = c('cw', 'sp'),

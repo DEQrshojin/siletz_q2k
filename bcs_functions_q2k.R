@@ -242,52 +242,96 @@ lswcd_q2k <- function(cOut = NULL, dir = NULL, nme = NULL) {
 # __________________________________________________________________________----
 # USE AIR TEMPERATURE TO CREATE INFLOW T and DO BOUNDARIES ----
 airT_corr_q2k <- function(cOut = NULL, dir = NULL, nme = NULL) {
+  
+  # Reads the stream temperatures from daily min/max regressions. Returns the
+  # BC object of DO and stream temp.
 
-  # Reads the air temperature and returns the BC object of DO and stream temp.
-  # Import the regression parameters, relate all stations to Moonshine station
-  regs <- read.csv('C:/siletz_tmdl/01_inputs/02_q2k/corr_stats_m04.csv',
-                   stringsAsFactors = F)
+  # Read in stream temperature and DO
+  T_DO <- readRDS('C:/siletz_tmdl/01_inputs/02_q2k/RData/T_strm_BCs_2004_2017.RData')
+
+  # Reimport the hspf flow data for the confluence and trim to dates
+  qlc <- readRDS(paste0(dir, '/', nme, '_rchQLC_NOx.RData'));
   
-  # Re-order based on reach order
-  regs <- regs %>% arrange(q2kr)
+  qlc <- qlc[[1]][which(qlc[[1]]$Date %in% cOut[[1]]$date), 1 : 3]
   
-  # Read the air temperature
-  airT <- t_air_q2k(strD = cOut[[1]]$date[1],
-                    endD = cOut[[1]]$date[nrow(cOut[[1]])],
-                    hBsn = regs$hbas, q2k = F)
+  # Reduce the dates of the T_DO object to those in the scenario
+  temp <- T_DO$temp[which(T_DO$temp$date %in% cOut[['HW']]$date), ]
+  
+  dsO2 <- T_DO$DO[which(T_DO$DO$date %in% cOut[['HW']]$date), ]
+
+  # Headwaters
+  cOut$HW$tmp_dgC = (temp$NthFk * qlc$Bas1 + temp$SthFk * qlc$Bas2) / # Temp
+                    (qlc$Bas1 + qlc$Bas2)
+  
+  cOut$HW$do_mgL  = (dsO2$NthFk * qlc$Bas1 + dsO2$SthFk * qlc$Bas2) / # DO
+                    (qlc$Bas1 + qlc$Bas2)
+
+  # Trib inflows
+  T_DO$sites$hbas <- paste0('B', ifelse(T_DO$sites$hbas < 10, '0', ''),
+                            T_DO$sites$hbas)
+  
+  T_DO$sites$hbas <- 
+
+  # Rename the CTSI trib stations to the HSPF basin (reach) name (for lookups)    
+  for (i in 2 : length(names(temp))) {
+    names(temp)[i] <- names(dsO2)[i] <-
+      T_DO$sites$hbas[which(T_DO$sites$stn == names(temp)[i])]
+  }
+  
+  # Populate the BC object temperature and DO columns for each reach 
+  for (i in 2 : (length(cOut) - 2)) {
+    cOut[[i]]$tmp_dgC <- temp[, which(names(temp) == names(cOut)[i])]
+    cOut[[i]]$do_mgL  <- dsO2[, which(names(dsO2) == names(cOut)[i])]
+  }
+
+  # Initial conditions; select all data from start date (strD)
+  for (i in 1 : nrow(cOut[['Init']])) {
+    cOut[['Init']][i, 2] <- cOut[[i + 1]]$tmp_dgC[1]
+    cOut[['Init']][i, 5] <- cOut[[i + 1]]$do_mgL[1]
+  }
+  
+  return(cOut)
+  
+}
+
+ctsi_q2k <- function(cOut = NULL, dir = NULL, nme = NULL) {
+  
+  # Reads the 2004 CTSI stream temperatures & returns BC object of DO and T
+  
+  # Read in stream temperature and DO
+  T_DO <- readRDS('C:/siletz_tmdl/01_inputs/02_q2k/RData/ctsi_T_DO_2004.RData')
   
   # Reimport the hspf flow data for the confluence and trim to dates
   qlc <- readRDS(paste0(dir, '/', nme, '_rchQLC_NOx.RData'));
   
   qlc <- qlc[[1]][which(qlc[[1]]$Date %in% cOut[[1]]$date), 1 : 3]
-
-  # Perform the correlations - start with the confluence first, which requires 
-  # mixing the north and south confluence flow and temps. First trim to dates
-  # Mix and populate the output (cOut) list headwater temperatures
-  tCfl <- data.frame(date = cOut[['HW']]$date,
-                     tNth = regL(m = regs$m[1], b = regs$b[1], x = airT$X1),
-                     tSth = regL(m = regs$m[2], b = regs$b[2], x = airT$X2),
-                     stringsAsFactors = F)
-
-  # Shift the stream temperatures back by 4 hours (e.g., T@4a = T@12a)
-  for (j in 2 : 3) {tCfl[4 : nrow(tCfl), j] <- tCfl[1 : (nrow(tCfl) - 3), j]}
   
-  cOut[[1]]$tmp_dgC <- (tCfl$tNth * qlc$Bas1 + tCfl$tSth * qlc$Bas2) /
-                       (qlc$Bas1 + qlc$Bas2)
+  # Reduce the dates of the T_DO object to those in the scenario
+  temp <- T_DO$temp[which(T_DO$temp$date %in% cOut[['HW']]$date), ]
   
-  # Populate inflow temp bcs; use regressions for Rock Creek for consistency
-  for (i in 2 : (length(cOut) - 2)) {
-    
-    cOut[[i]]$tmp_dgC <- regL(m = regs$m[i + 1], b = regs$b[i + 1],
-                              x = airT[, i + 2])
-    
-    cOut[[i]][4 : nrow(airT), 4] <- cOut[[i]][1 : (nrow(airT) - 3), 4]
+  dsO2 <- T_DO$dsO2[which(T_DO$dsO2$date %in% cOut[['HW']]$date), ]
   
+  # Headwaters
+  cOut$HW$tmp_dgC = (temp$NthFk * qlc$Bas1 + temp$SthFk * qlc$Bas2) / # Temp
+                    (qlc$Bas1 + qlc$Bas2)
+  
+  cOut$HW$do_mgL  = (dsO2$NthFk * qlc$Bas1 + dsO2$SthFk * qlc$Bas2) / # DO
+                    (qlc$Bas1 + qlc$Bas2)
+  
+  # Trib inflows
+  T_DO$sites$hbas <- paste0('B', ifelse(T_DO$sites$hbas < 10, '0', ''),
+                            T_DO$sites$hbas)
+  
+  # Rename the CTSI trib stations to the HSPF basin (reach) name (for lookups)    
+  for (i in 2 : length(names(temp))) {
+    names(temp)[i] <- names(dsO2)[i] <-
+      T_DO$sites$hbas[which(T_DO$sites$stn == names(temp)[i])]
   }
   
-  # Populate inflow DO bcs. Assume 100% saturation
-  for (i in 1 : (length(cOut) - 2)) {
-    cOut[[i]]$do_mgL <- do_sat(temp = cOut[[i]]$tmp_dgC, elev = regs$elv[i + 1])
+  # Populate the BC object temperature and DO columns for each reach 
+  for (i in 2 : (length(cOut) - 2)) {
+    cOut[[i]]$tmp_dgC <- temp[, which(names(temp) == names(cOut)[i])]
+    cOut[[i]]$do_mgL  <- dsO2[, which(names(dsO2) == names(cOut)[i])]
   }
   
   # Initial conditions; select all data from start date (strD)
@@ -295,7 +339,7 @@ airT_corr_q2k <- function(cOut = NULL, dir = NULL, nme = NULL) {
     cOut[['Init']][i, 2] <- cOut[[i + 1]]$tmp_dgC[1]
     cOut[['Init']][i, 5] <- cOut[[i + 1]]$do_mgL[1]
   }
-
+  
   return(cOut)
   
 }
