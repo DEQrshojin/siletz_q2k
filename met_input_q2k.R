@@ -1,107 +1,119 @@
 rm(list = ls()); cat('\014')
 
+suppressMessages(library(raster)); suppressMessages(library(dplyr))
+suppressMessages(library(lubridate))
+
 # LOAD FUNCTIONS, VARS & DATA ----
-source('D:/siletz_q2k/04_scripts/met_functions_q2k.R')
+source('C:/siletz_tmdl/04_scripts/02_q2k/02_R/met_functions_q2k.R')
+source('C:/siletz_tmdl/04_scripts/01_hspf/02_R/fnct_utilities_hspf.R')
+source('C:/siletz_tmdl/04_scripts/02_q2k/02_R/q2k_utilities.R')
+source('C:/siletz_tmdl/04_scripts/03_hs/02_R/fnct_eff_shd.R')
 
-# CHANCE DATES HERE
-# strD <- '2017-07-07'; endD <- '2017-08-29'
-# strD <- '2017-09-08'; endD <- '2017-10-16'
-strD <- '2004-01-01'; endD <- '2018-01-01'
-# CHANCE DATES HERE
+# Get the model information from both control files
+nNme <- read_ctrF_H(); ctrF <- read_ctrF_Q(); a <- ctrF$oDir
 
-for (i in 1) {
+if (substr(a, nchar(a), nchar(a)) != '/') {ctrF$oDir <- paste0(ctrF$oDir, '/')}
+
+tz = 'America/Los_Angeles'
+
+# Create a data frame with all of the iterable components
+itrs <- data.frame(strD = as.POSIXct(c(ctrF$str1, ctrF$str2), '%Y-%m-%d', tz = tz),
+                   endD = as.POSIXct(c(ctrF$end1, ctrF$end2), '%Y-%m-%d', tz = tz),
+                   wrmU = as.numeric(c(ctrF$wrm1, ctrF$wrm2)), seas = c('cw', 'sp'))
+
+x <- readRDS(paste0(ctrF$mDir, 'met_data_4_Q2Kw.RData'))
+
+dirV <- c('mt_Ta', 'mt_Td', 'mt_CC', 'mt_wnd', 'mt_eShd')
+
+for (i in 1 : 2) {
+
+  if (itrs$wrmU[i] == 0) {nday = NULL} else {nday = itrs$wrmU[i]}
   
-  dtes <- as.POSIXct(c(strD, endD), '%Y-%m-%d', tz = 'America/Los_Angeles')
+  # AIR TEMPERATURE ____________________________________________________________
+  if (ctrF$airT == 'TRUE') {
+
+    airT <- t_air_q2k(strD = itrs$strD[i], endD = itrs$endD[i],
+                      hBsn = c(3, 6, 7, 8, 11, 12, 13, 14, 15, 16), q2k = T,
+                      nday = nday)
+    
+    if (ctrF$mdTa == 'TRUE') {
+      airT <- modify_met_df(df = airT, strD = itrs$strD[i], endD = itrs$endD[i],
+                            mdfy = ctrF$mdTa)
+    }
+    
+    write.csv(x = airT, row.names = F,
+              file = paste0(ctrF$oDir, dirV[1], '/', nNme$name, '_airT_',
+                            itrs$seas[i],'.csv'))
+    
+  }
+
+  # DEW POINT TEMPERATURE ______________________________________________________
+  if (ctrF$dwpT == 'TRUE') {
+    
+    dwpT <- t_dwp_q2k(strD = itrs$strD[i], endD = itrs$endD[i],
+                      hBsn = c(3, 6, 7, 8, 11, 12, 13, 14, 15, 16), q2k = T,
+                      nday = nday)
+    
+    if (ctrF$mdTd == 'TRUE') {
+      dwpT <- modify_met_df(df = dwpT, strD = itrs$strD[i], endD = itrs$endD[i],
+                            mdfy = ctrF$mdTd)
+    }
+    
+    write.csv(x = dwpT, row.names = F,
+              file = paste0(ctrF$oDir, dirV[2], '/', nNme$name, '_dwpT_',
+                            itrs$seas[i],'.csv'))
+    
+  }
+
+  # CLOUD COVER ________________________________________________________________
+  if (ctrF$cCov == 'TRUE') {
+    
+    cCov <- cloud_q2k(x = x, strD = itrs$strD[i], endD = itrs$endD[i],
+                      nday = nday)
+    
+    # Hard code this modification in 
+    d <- as.POSIXct(c('2017-07-07', '2017-08-29'), '%Y-%m-%d',
+                    tz = 'America/Los_Angeles')
+    
+    if (length(ctrF$mdCc) != 0 & length(ctrF$mdCc) != 1) {
+      cCov <- modify_met_df(df = cCov, strD = d[1], endD = d[2], mdfy = ctrF$mdCc)
+    }
+    
+    write.csv(x = cCov, row.names = F,
+              file = paste0(ctrF$oDir, dirV[3], '/', nNme$name, '_cCov_',
+                            itrs$seas[i],'.csv'))
+    
+  }
+
+  # WIND SPEED _________________________________________________________________
+  if (ctrF$wndU == 'TRUE') {
+
+    wndU <- wind_q2k(x = x, strD = itrs$strD[i], endD = itrs$endD[i], 
+                     nday = nday)
+    
+    if (length(ctrF$mdWs) != 0 & length(ctrF$mdWs) != 1) {
+      wndU <- modify_met_df(df = wndU, strD = itrs$strD[i], endD = itrs$endD[i],
+                            mdfy = ctrF$mdWs)
+    }
+    
+    write.csv(x = wndU, row.names = F,
+              file = paste0(ctrF$oDir, dirV[4], '/', nNme$name, '_wndS_',
+                            itrs$seas[i],'.csv'))
+
+  }
   
-  pth <- paste0('//deqhq1/tmdl/TMDL_WR/MidCoast/Models/Dissolved Oxygen/Middle_S',
-                'iletz_River_1710020405/001_data/met_data/')
-  
-  x <- readRDS(file = paste0(pth, 'met_data_4_Q2Kw.RData'))
-  
-  shp = paste0('C:/Users/rshojin/Desktop/001_projects/mid_coast_DO_tmdls/GIS/001',
-               '_data/shape/catchment_centroids_HSPF_wgs84.shp')
-  
-  dirA = 'C:/Users/rshojin/Desktop/002_gis/003_climate/prism/'
-  
-  dirW = 'C:/Users/rshojin/Desktop/002_gis/003_climate/prism/tdmean/'
+  # EFFECTIVE SHADE ____________________________________________________________
+  if (ctrF$eShd == 'TRUE') {
+    
+    # Load the shade data
+    allD <- readRDS(ctrF$sDir)
+    
+    eShd <- effshd_4_q2k(ES = allD, strD = itrs$strD[i], endD = itrs$endD[i],
+                         nday = nday)
+    
+    write.csv(x = eShd, row.names = F,
+              file = paste0(ctrF$oDir, dirV[5], '/', nNme$name, '_eShd_',
+                            itrs$seas[i],'.csv'))
 
-}
-
-# AIR TEMP SCRATCH ----
-# for (i in 1) {
-# 
-  dtes <- as.POSIXct(c(strD, endD), '%Y-%m-%d', tz = 'America/Los_Angeles')
-
-  # column 5 for air temperature at Newport
-  mDat <- x[which(x$time >= dtes[1] & x$time <= dtes[2]), c(1, 5)]
-
-  tmes <- minmax_time(mDat); tmnt <- tmes$min; tmxt <- tmes$max
-
-  airT <- t_air_q2k(strD = strD, endD = endD, shp = shp, dir = dirA, tmxt = tmxt,
-                    tmnt = tmnt, nday = 7)
-  
-# 
-#   # plot <- plot_temps(df = airT); windows(12, 12); plot
-#   # 
-#   # ggsave(filename = 'air_temp_initC.png', plot = plot, path = 'D:/siletz_q2k/02_input',
-#   #        width = 15, height = 10, units = 'in', dpi = 300)
-# 
-# }
-# 
-# # DEWP TEMP SCRATCH ----
-# for (i in 1) {
-
-  dtes <- as.POSIXct(c(strD, endD), '%Y-%m-%d', tz = 'America/Los_Angeles')
-
-  # column 3 for dew point at Newport and convert to celsius
-  dpts <- x[which(x$time >= dtes[1] & x$time <= dtes[2]), c(1, 3)]
-
-  tmes <- minmax_time(dpts)
-  
-  tmes$min <- ifelse(is.na(tmes$min), tmes$date + hours(5), tmes$min)
-  
-  tmes$max <- ifelse(is.na(tmes$max), tmes$date + hours(17), tmes$max)
-  
-  tmes$min <- as.POSIXct(tmes$min, origin = '1970-01-01', tz = 'America/Los_Angeles')
-  
-  tmes$max <- as.POSIXct(tmes$max, origin = '1970-01-01', tz = 'America/Los_Angeles')
-  
-  tmnt <- tmes$min; tmxt <- tmes$max
-
-  dpts$tdw_nwp <- (dpts$tdw_nwp - 32) / 1.8
-  
-  airT <- readRDS('D:/siletz_TMDL/01_inputs/02_q2k/RData/T_dwp_2004_2017.RData')
-
-  dwpT <- suppressMessages(t_dwpnt_q2k(dpts = dpts, strD = strD, endD = endD,
-                                       shp = shp, dir = dirW, tmxt = tmxt,
-                                       tmnt = tmnt, airT = airT, nday = 7))
-
-# }
-
-# CLOUD, WIND & SOLAR ----
-for (i in 1) {
-
-  cCov <- cloud_q2k(x = x, strD = strD, endD = endD, nday = NULL)
-
-  # mdfy has to have same length as the df. Smaller number means less cloudy
-  cCov <- modify_met(df = cCov, strD = '2017-08-05', endD = '2017-08-14',
-                     mdfy = c(20, 20, 70, 70, rep(90, 6)))
-  
-  # wndU <- wind_q2k(x = x, strD = strD, endD = endD,
-  #                  mdfr = c(0, 5, 10, 10, 25, 25, 25, 25, 35, 35))
-
-  # solr <- solar_q2k(strD = strD, endD = endD, nday = 7)
-  
-}
-
-# SAVE FILES ----
-path <- 'D:/siletz_q2k/02_input/wq_cw_11_noWU/'; sffx <- 'wq_cw_11_noWU'
-
-# write.csv(x = airT, file = paste0(path, 'air_temp_', sffx, '.csv'), row.names = F)
-# write.csv(x = dwpT, file = paste0(path, 'dwp_temp_', sffx, '.csv'), row.names = F)
-write.csv(x = cCov, file = paste0(path, 'cld_covr_MDFY_', sffx, '.csv'), row.names = F)
-# write.csv(x = wndU, file = paste0(path, 'wind_spd_', sffx, '.csv'), row.names = F)
-# write.csv(x = solr, file = paste0(path, 'solr_rad_', sffx, '.csv'), row.names = T)
-
-
-
+  }
+}  

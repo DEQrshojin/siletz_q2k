@@ -4,253 +4,62 @@
 
 # __________________________________________________________________________----
 # Temperature - Dry Bulb ----
-t_air_q2k <- function(strD = NULL, endD = NULL, shp = NULL, dir = NULL,
-                      tmxt = NULL, tmnt = NULL, nday = NULL) {
+t_air_q2k <- function(strD = NULL, endD = NULL, hBsn = NULL, q2k = F,
+                      nday = NULL) {
   
-  # Function to create an hourly time series of air temperature data for each
-  # Qual-2Kw reach using gridded daily PRISM max/min air temperature data
-  # interpolates a sinusoidal time series based on specific timing of max/min
-  # temperatures. Arguements:
-  # strD = start date of desired time series data
-  # endD = end date of desired time series data
-  # shp = shape file of basins--specify full path name, not the object itself
-  # dir = directory of the prism data
-  # tmxt = vector of time of maximum temperature (using minmax_time())
-  # tmnt = vector of time of minimum temperature (using minmax_time())
-  # nday = number of warm-up days
+  # Read the T_air data
+  airT <- readRDS("C:/siletz_tmdl/01_inputs/02_q2k/RData/T_air_2004_2017.RData")
 
-  library(raster); library(dplyr)
+  names(airT)[1] <- 'date'
   
-  # Load the shapefile
-  shp <- shapefile(shp)
+  # Strip to dates (strD, endD)
+  dtes <- as.POSIXct(c(strD, endD), '%Y-%m-%d', tz = 'America/Los_Angeles')
   
-  # Create time series vectors for both 
-  dtes <- seq(as.POSIXct(strD, '%Y-%m-%d', tz = 'America/Los_Angeles'),
-              as.POSIXct(endD, '%Y-%m-%d', tz = 'America/Los_Angeles'), 86400)
+  airT <- airT[which(airT$date >= dtes[1] & airT$date <= dtes[2]), ]
   
-  # List the folders and files for min/max T
-  if (substr(dir, nchar(dir), nchar(dir)) != '/') {dir <- paste0(dir, '/')}
-  
-  # List grids for interrogation
-  rfmn <- paste0(dir, 'tmin/Oregon_tmin_', format(dtes, '%Y%m%d'), '.asc')
-  
-  rfmx <- paste0(dir, 'tmax/Oregon_tmax_', format(dtes, '%Y%m%d'), '.asc')
-  
-  mnmx <- list(min = data.frame(matrix(ncol = length(shp), nrow = 0)),
-               max = data.frame(matrix(ncol = length(shp), nrow = 0)))
-  
-  for (i in 1 : length(rfmn)) {
-    
-    rast <- list(min = raster(rfmn[i]), max = raster(rfmx[i]))
-    
-    for (j in 1 : 2) {mnmx[[j]] = rbind(mnmx[[j]],
-                                        raster::extract(rast[[j]], shp))}
-    
-  }
-  
-  names(mnmx[[1]]) <- names(mnmx[[2]]) <- paste0('B', 1 : length(mnmx[[1]]))
-  
-  # Set up the data frame for the time series data
-  dtes <- seq(as.POSIXct(strD, '%Y-%m-%d', tz = 'America/Los_Angeles'),
-              as.POSIXct(endD, '%Y-%m-%d', tz = 'America/Los_Angeles'), 3600)
-  
-  airT <- data.frame(dates = dtes, matrix(ncol = length(shp), nrow = length(dtes)))
-  
-  for (i in 1 : length(tmxt)) {
-    
-    # Special case where initial temp is not defined
-    if (i == 1) {
-      
-      temp <- airT[which(airT$dates <= tmnt[i]), ]
-      
-      for (j in 2 : length(temp)) {
-        
-        # Calculate a sinusoidal time series between the daily max/min
-        temp[, j] <- calc_sin(mnmx[['min']][i, j - 1], mnmx[['min']][i, j - 1],
-                              temp$dates)
-        
-      }
-      
-      airT[which(airT$dates <= tmnt[i]), ] <- temp
-      
-    }
-    
-    # Calculate the AM to PM time series
-    temp <- airT[which(airT$dates >= tmnt[i] & airT$dates <= tmxt[i]), ]
-    
-    for (j in 2 : length(temp)) {
-      
-      temp[, j] <- calc_sin(mnmx[['max']][i, j - 1], mnmx[['min']][i, j - 1],
-                            temp$dates)
-      
-    }
-    
-    airT[which(airT$dates >= tmnt[i] & airT$dates <= tmxt[i]), ] <- temp
-    
-    # Calculate the PM to AM time series
-    if (i != length(tmxt)) {
-      
-      temp <- airT[which(airT$dates >= tmxt[i] & airT$dates <= tmnt[i + 1]), ]
-      
-      for (j in 2 : length(temp)) {
-        
-        temp[, j] <- calc_sin(mnmx[['min']][i + 1, j - 1],
-                              mnmx[['max']][i, j - 1], temp$dates)
-        
-      }
-      
-      airT[which(airT$dates >= tmxt[i] & airT$dates <= tmnt[i + 1]), ] <- temp
-      
-    } else { # Special case where last temp not defined
-      
-      temp <- airT[which(airT$dates >= tmxt[i]), ]
-      
-      for (j in 2 : length(temp)) {
-        
-        temp[, j] <- calc_sin(mnmx[['max']][i, j - 1], mnmx[['max']][i, j - 1],
-                              temp$dates)
-        
-      }
-      
-      airT[which(airT$dates >= tmxt[i]), ] <- temp
-      
-    }
-  }
-
-  # Remove the indirect input columns
-  # airT <- airT[, c(1, 4, 7, 8, 9, 12, 13, 14, 15, 16, 17)]
+  # Strip to basins (hBsn)
+  airT <- airT[, which(names(airT) %in% c('date', paste0('X', hBsn)))]
   
   # Add warm up days if nday = real number
-  # if (!is.null(nday)) {airT <- add_warm_up(df = airT, nday = nday)}
+  if (!is.null(nday)) {airT <- add_warm_up(df = airT, nday = nday)}
   
-  # Remove duplicate datetimes
-  airT <- change_dups(airT)
-  
-  # Fill NAs
-  airT <- airT %>% tidyr::fill(everything())
-  
-  # row.names(airT) <- airT$date; airT <- airT[, -1]; airT <- data.frame(t(airT))
-  
+  # Transpose if for Q2K boundary file
+  if (q2k) {
+    row.names(airT) <- airT$date
+    airT <- airT[, -1]
+    airT <- data.frame(t(airT))
+  }
+
   return(airT)
   
 }
 
 # __________________________________________________________________________----
 # Temperature - Dew Point ----
-t_dwpnt_q2k <- function(dpts = NULL, strD = NULL, endD = NULL, shp = NULL,
-                        dir = NULL, tmxt = NULL, tmnt = NULL, nday = NULL,
-                        airT = NULL) {
+t_dwp_q2k <- function(strD = NULL, endD = NULL, hBsn = NULL, q2k = F,
+                      nday = NULL) {
   
-  # Function to create an hourly time series of dewpoint temperature data 4 each
-  # Qual-2Kw reach using gridded daily PRISM mean dewpoint temperature data
-  # interpolates a sinusoidal time series based on specific timing of max/min
-  # temperatures. Arguements:
-  # dpts = dew point time series to be adjusted per basin
-  # strD = start date of desired time series data
-  # endD = end date of desired time series data
-  # shp = shape file of basins--specify full path name, not the object itself
-  # dir = directory of the prism data
-  # tmxt = vector of time of maximum dewpoint temperature (using minmax_time())
-  # tmnt = vector of time of minimum dewpoint temperature (using minmax_time())
-  # Number of warm up days (nday) with repeating day one in front of the real data
-  # Air temp -> Data frame of concurrent air temp to ensure dwpT <= airT
-
-  library(raster); library(dplyr)
+  # Read the T_air data
+  dwpT <- readRDS("C:/siletz_tmdl/01_inputs/02_q2k/RData/T_dwp_2004_2017.RData")
   
-  # Load the shapefile
-  shp <- shapefile(shp)
+  names(airT)[1] <- 'date'
   
-  # Create time series vectors for both 
-  dtes <- seq(as.POSIXct(strD, '%Y-%m-%d', tz = 'America/Los_Angeles'),
-              as.POSIXct(endD, '%Y-%m-%d', tz = 'America/Los_Angeles'), 86400)
+  # Strip to dates (strD, endD)
+  dtes <- as.POSIXct(c(strD, endD), '%Y-%m-%d', tz = 'America/Los_Angeles')
   
-  # Need to shift the dtes forward for the PRISM interrogation because mean daily 
-  # PRISM data for any given day are defined for the period ending at 7:00AM on
-  # that day, rather than at the end of the day! So...to get the approximate mean
-  # mean daily PRISM data for a given day, go get the PRISM data for the previous day.
-  dte2 <- dtes + 86400
+  dwpT <- dwpT[which(dwpT$date >= dtes[1] & dwpT$date <= dtes[2]), ]
   
-  # List the folders and files for min/max T
-  if (substr(dir, nchar(dir), nchar(dir)) != '/') {dir <- paste0(dir, '/')}
-  
-  yrs <- unique(year(dtes))
-  
-  rfdp <- NULL
-  
-  for (i in 1 : length(yrs)) {
-    tmp1 <- dte2[which(year(dte2) == yrs[i])]
-    tmp2 <- paste0(dir, 'yr_', yrs[i], '/PRISM_tdmean_stable_4kmD1_',
-                   format(tmp1, '%Y%m%d'), '_bil.asc')
-    rfdp <- append(rfdp, tmp2)
-  }
-  
-  # Set up data frame shell for the basin specific mean dewpoint T (with correct dates)
-  # bmdp <- data.frame(date = dtes, matrix(data = 0, ncol = length(shp), nrow = length(dtes)))
-  #
-  # Populate data frame
-  # for (i in 1 : length(rfdp)) {
-  #   
-  #   rast <- raster(rfdp[i])
-  #   
-  #   bmdp[i, 2 : (length(shp) + 1)] = raster::extract(rast, shp)
-  #   
-  # }
-  
-  bmdp <- readRDS(paste0('D:/siletz_TMDL/01_inputs/02_q2k/RData/PRISM_mean_dai',
-                         'ly_T_dwp_2004_2017.RData'))
-  
-  # Rename columns
-  # names(bmdp) <- c('date', paste0('B', 1 : length(shp)))
-  
-  # Rename columns of dewpoint time series
-  names(dpts) <- c('date', 'tdpC')
-
-  # 1) Calculate mean daily T_dwp for the dewpoint time series
-  mdwp <- aggregate(dpts$tdpC, by = list(floor_date(dpts$date, unit = 'day')),
-                    FUN = mean, na.rm = T)  
-  
-  # 2) Subtract mean daily T_dwp @ basin from T_dwp @ Nwp (mean dailys)
-  for (i in 1 : nrow(bmdp)) {
-    bmdp[i, 2 : (length(shp) + 1)] <- mdwp[i, 2] - bmdp[i, 2 : (length(shp) + 1)]
-  }
-  
-  bmdp$date <- floor_date(x = bmdp$date, unit = 'days')
-  
-  # 2) Subtract that difference from the T_dwp @ Nwp (time series) for each basin
-  # Set up the data frame for the time series data
-  dtes <- seq(as.POSIXct(strD, '%Y-%m-%d', tz = 'America/Los_Angeles'),
-              as.POSIXct(endD, '%Y-%m-%d', tz = 'America/Los_Angeles'), 3600)
-  
-  dwpT <- data.frame(datetime = dtes,
-                     date = floor_date(dtes, unit = 'day'),
-                     tdpC = dpts$tdpC)
-
-  dwpT <- merge(dwpT, bmdp, by.x = 'date', by.y = 'date', all.x = T)
-  
-  for (i in 4 : length(dwpT)) {dwpT[, i] <- dwpT[, 3] - dwpT[, i]}
-  
-  dwpT <- dwpT[, -c(1, 3)]
-  
-  # Remove indirect input columns and transpose
-  # dwpT <- dwpT[, c(1, 4, 7, 8, 9, 12, 13, 14, 15, 16, 17)]
+  # Strip to basins (hBsn)
+  dwpT <- dwpT[, which(names(dwpT) %in% c('date', paste0('X', hBsn)))]
   
   # Add warm up days if nday = real number
-  # if (!is.null(nday)) {dwpT <- add_warm_up(df = dwpT, nday = nday)}
+  if (!is.null(nday)) {dwpT <- add_warm_up(df = dwpT, nday = nday)}
   
-  # Remove duplicate datetimes
-  dwpT <- change_dups(dwpT)
-  
-  for (i in 2 : length(dwpT)) {dwpT[which(is.nan(dwpT[, i])), i] <- NA} 
-  
-  dwpT <- dwpT %>% tidyr::fill(everything())
-  
-  row.names(dwpT) <- dwpT$date; dwpT <- dwpT[, -1]; dwpT <- data.frame(t(dwpT))
-  
-  # Check the dewpoint T >= air T. Set equal to air T if greater than.
-  for (i in 2 : length(dwpT)) {
-    
-    dwpT[, i] <- ifelse(dwpT[, i] < airT[, i], dwpT[, i], airT[, i])
-    
+  # Transpose if for Q2K boundary file
+  if (q2k) {
+    row.names(dwpT) <- dwpT$date
+    dwpT <- dwpT[, -1]
+    dwpT <- data.frame(t(dwpT))
   }
   
   return(dwpT)
@@ -260,8 +69,6 @@ t_dwpnt_q2k <- function(dpts = NULL, strD = NULL, endD = NULL, shp = NULL,
 # __________________________________________________________________________----
 # Cloud Cover ----
 cloud_q2k <- function(x = NULL, strD = NULL, endD = NULL, nday = NULL) {
-  
-  library(dplyr)
   
   # This function interrogates hardwired met data file and returns cloud
   # cover (fraction - 0 = clear, 1 = totally cloudy)
@@ -296,13 +103,12 @@ cloud_q2k <- function(x = NULL, strD = NULL, endD = NULL, nday = NULL) {
 
 # __________________________________________________________________________----
 # Wind Speed ----
-wind_q2k <- function(x = NULL, strD = NULL, endD = NULL, nday = NULL,
-                     mdfr = NULL) {
+wind_q2k <- function(x = NULL, strD = NULL, endD = NULL, nday = NULL) {
   
   # This function interrogates hardwired met data file and returns wind speed
   dtes <- as.POSIXct(c(strD, endD), '%Y-%m-%d', tz = 'America/Los_Angeles')
   
-  mDat <- x[which(x$time >= dtes[1] & x$time <= dtes[2]), c(1, 7)]
+  mDat <- x[which(x$time >= dtes[1] & x$time <= dtes[2]), c(1, 7)] # Newport
   
   mDat <- data.frame(date = mDat$time,
                      B3   = mDat$usp_nwp, B6   = mDat$usp_nwp,
@@ -322,10 +128,6 @@ wind_q2k <- function(x = NULL, strD = NULL, endD = NULL, nday = NULL,
   
   mDat <- mDat %>% tidyr::fill(everything())
 
-  if (!is.null(mdfr)) {for (i in 2 : length(mDat)) {
-      mDat[, i] <- mDat[, i] * mdfr[i - 1] / 100
-  }}
-
   # Transpose and set col names to row 1
   row.names(mDat) <- mDat$date; mDat <- mDat[, -1]; mDat <- data.frame(t(mDat))
 
@@ -334,58 +136,12 @@ wind_q2k <- function(x = NULL, strD = NULL, endD = NULL, nday = NULL,
 }  
 
 # __________________________________________________________________________----
-# Direct Solar Radiation ----
-solar_q2k <- function(strD = NULL, endD = NULL, nday = NULL) {
-
-  source('C:/Users/rshojin/Desktop/006_scripts/github/Met_Functions/solar2par.R')
-  
-  # lat/lon of basin centroids
-  basn <- read.csv(paste0('//deqhq1/tmdl/TMDL_WR/MidCoast/Models/Dissolved Oxyge',
-                          'n/Middle_Siletz_River_1710020405/004_gis/001_data/001',
-                          '_shape/siletz_catchments_HSPF_latlon.csv'))
-  
-  basn <- basn[basn$HSPF_Bas %in% c(3, 6, 7, 8, 11, 12, 13, 14, 15, 16), c(5, 11, 12)]
-  
-  tz = 'America/Los_Angeles'
-  
-  dtes <- as.POSIXct(c(strD, endD), '%Y-%m-%d', tz = tz)
-  
-  solr <- data.frame(date = seq(dtes[1], dtes[length(dtes)], 3600))
-  
-  solr <- cbind(solr, matrix(data = 0, nrow = nrow(solr), ncol = nrow(basn)))
-  
-  names(solr)[2 : length(solr)] <- paste0('basn_', basn$HSPF_Bas)
-  
-  for (i in 1 : nrow(basn)) {
-    
-    tmp <- solar2par(strDate = dtes[1], endDate = dtes[length(dtes)],
-                     lat = basn[i, 2], lon = basn[i, 3], pres = 1013)
-    
-    solr[, i + 1] <- tmp$solar
-    
-  }
-  
-  # Add warm up days if nday = real number
-  if (!is.null(nday)) {solr <- add_warm_up(df = solr, nday = nday)}
-  
-  # Remove duplicate datetimes
-  solr <- remove_dups(solr)
-  
-  row.names(solr) <- solr$date; solr <- solr[, -1]; solr <- data.frame(t(solr))
-
-  return(solr)  
-
-}
-
-# __________________________________________________________________________----
 # Supporting functions ----
 minmax_time <- function(mDat = NULL) {
   
   # Specify a dataframe of date/times and variable values; this function returns
   # a data frame of the times of maximum and minimum values for each day
-  
-  library(dplyr); library(lubridate)
-  
+
   names(mDat) <- c('time', 'val')
   
   # Create the dates and AM/PM
@@ -427,7 +183,7 @@ minmax_time <- function(mDat = NULL) {
 calc_sin <- function(t1 = NULL, t2 = NULL, x = NULL) {
   
   # Function for creating a sinusoidal signal between a daily max and min value
-  # Additional arguement includes the time series between the max & min
+  # Additional arguement includes the time series (x) between the max & min
   
   x <- pi * (as.numeric(x - min(x)) / 3600) / (length(x) - 1)
   
@@ -437,26 +193,27 @@ calc_sin <- function(t1 = NULL, t2 = NULL, x = NULL) {
   
 }
 
-plot_temps <- function(df = NULL) {
+add_warm_up <- function(df = NULL, nday = NULL) {
   
-  # Input a data frame (wide) of temperatures by basin, plots to window and
-  # returns a plot object
+  # Rename the dates column for consistency
+  names(df)[1] <- 'date'
   
-  library(reshape2); library(ggplot2)
+  # Chunk out the first day
+  temp <- df[1 : 24, ]
   
-  names(df) <- c('dates', paste0('B', names(df)[2 : length(df)]))
+  # Create the data frame of repeating first days
+  for (i in 1 : (nday - 1)) {temp <- rbind(temp, df[1 : 24, ])}
   
-  y <- melt(data = df, id.vars = 'dates', variable.name = 'basn', value.name = 'tmpC')
+  df <- rbind(temp, df)
   
-  plot <- ggplot(data = y, aes(x = dates, y = tmpC, color = basn)) + geom_line()
+  # Recalculate the date/times of each data-frame
+  df$date <- seq(df$date[1] - nday * 86400, df$date[nrow(df)], 3600)
   
-  return(plot)
-  
+  return(df)
+
 }
 
 change_dups <- function(df = NULL) {
-  
-  library(dplyr)
 
   df$dchar <- as.character(df$date)
   
@@ -469,25 +226,3 @@ change_dups <- function(df = NULL) {
 
 }
 
-modify_met <- function(df = NULL, strD = NULL, endD = NULL, mdfy = NULL) {
-  
-  df <- data.frame(t(df), stringsAsFactors = F)
-
-  df$date <- as.POSIXct(row.names(df), 'X%Y.%m.%d.%H.%M.%S',
-                        tz = 'America/Los_Angeles')
-  
-  dtes <- as.POSIXct(c(strD, endD), '%Y-%m-%d', tz = 'America/Los_Angeles')
-  
-  cond <- which(df$date >= strD & df$date <= endD)
-  
-  temp <- df[cond, 1 : (length(df) - 1)]
-    
-  for (i in 1 : length(temp)) {temp[, i] <- temp[, i] * mdfy[i] / 100} 
-  
-  df[cond, 1 : (length(df) - 1)] <- temp
-  
-  df <- data.frame(t(df[, 1 : 10]), stringsAsFactors = F)
-  
-  return(df)
-  
-}
