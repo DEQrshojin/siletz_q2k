@@ -43,7 +43,7 @@ DO_analysis <- function(scen = NULL, wudy = NULL, strD = NULL) {
 
     } else {
       
-      temp           <- mOut[[cnst$seas[i]]][, c(1, 7, cnst$cCol[i])]
+      temp           <- mOut[[cnst$seas[i]]][, c(1, 8, cnst$cCol[i])]
       
       temp <- aggregate(temp[, 3], by = list(temp$rch, temp$dte),
                         FUN = cnst$sttD[i])
@@ -86,7 +86,7 @@ calc_DO_sat <- function(df = NULL) {
   df$dos <- round(100 * (df$doc / df$sdo), 1)
   
   # Cap at 100% saturation
-  df$dos <- ifelse(df$dos > 100, 100, df$dos)
+  df$dos_cap <- ifelse(df$dos > 100, 100, df$dos)
   
   # Remove the sat DO concentration column
   df <- df[, -6]
@@ -275,11 +275,11 @@ graph_output <- function(df = NULL, scen = NULL, path = NULL, n = NULL) {
   names(df)[1] <- 'Reach'; df <- df[-which(df$Reach == 0), ]
   
   # GRAPH, PART 1 - Essential components (not comparing to standard)
-  pl <- ggplot(data = df, aes(x = dte, y = stat)) + theme_bw() +
-    geom_line(aes(linetype = as.factor(flag)), size = 0.9) +
-    ylab(g$ylab) + scale_y_continuous(limits = c(g$ymin, g$ymax)) +    
-    scale_x_datetime(limits = c(g$dte1, g$dte2)) +
-    facet_wrap(.~ Reach, ncol = 2, labeller = label_both)
+  pl <- ggplot(data = df, aes(x = dte, y = stat)) + theme_classic () +
+        geom_line(aes(linetype = as.factor(flag)), size = 0.9) +
+        ylab(g$ylab) + scale_y_continuous(limits = c(g$ymin, g$ymax)) +    
+        scale_x_datetime(limits = c(g$dte1, g$dte2)) +
+        facet_wrap(.~ Reach, ncol = 2, labeller = label_both)
   
   if (is.na(g$nday)) {
     
@@ -301,10 +301,10 @@ graph_output <- function(df = NULL, scen = NULL, path = NULL, n = NULL) {
                      axis.title.y      = element_text(size = 12),
                      axis.title.x      = element_blank(),
                      strip.text        = element_text(size = 12)) +
-      geom_segment(aes(x = g$dte1, xend = g$dte2, y = g$stnd, yend = g$stnd),
-                   color = 'darkblue', linetype = 2) +
-      geom_text(data = plce, label = plce$wrds, hjust = g$hjst,
-                vjust = g$vjst, size = 3.25)
+          geom_segment(aes(x = g$dte1, xend = g$dte2, y = g$stnd, yend = g$stnd),
+                       color = 'darkblue', linetype = 2) +
+          geom_text(data = plce, label = plce$wrds, hjust = g$hjst,
+                    vjust = g$vjst, size = 3.25)
     
   } else {
     
@@ -316,19 +316,19 @@ graph_output <- function(df = NULL, scen = NULL, path = NULL, n = NULL) {
                    ' days of predictions')
     
     pl <- pl + scale_linetype_manual(values = c(6, 1), labels = lgnd) +  
-      geom_segment(aes(x = g$dte1, xend = g$dte2, y = g$stnd, yend = g$stnd),
-                   color = 'darkblue', linetype = 2) +
-      geom_text(data = plce, label = plce$wrds, hjust = g$hjst,
-                vjust = g$vjst, size = 3.25) +
-      theme(legend.position   = c(g$lgd1, g$lgd2),
-            legend.direction  = 'horizontal',
-            legend.background = element_blank(),
-            legend.title      = element_blank(),
-            axis.text.x       = element_text(size = 11),
-            axis.text.y       = element_text(size = 11),
-            axis.title.y      = element_text(size = 12),
-            axis.title.x      = element_blank(),
-            strip.text        = element_text(size = 12))
+          geom_segment(aes(x = g$dte1, xend = g$dte2, y = g$stnd, yend = g$stnd),
+                       color = 'darkblue', linetype = 2) +
+          geom_text(data = plce, label = plce$wrds, hjust = g$hjst,
+                    vjust = g$vjst, size = 3.25) +
+          theme(legend.position   = c(g$lgd1, g$lgd2),
+                legend.direction  = 'horizontal',
+                legend.background = element_blank(),
+                legend.title      = element_blank(),
+                axis.text.x       = element_text(size = 11),
+                axis.text.y       = element_text(size = 11),
+                axis.title.y      = element_text(size = 12),
+                axis.title.x      = element_blank(),
+                strip.text        = element_text(size = 12))
     
   }
   

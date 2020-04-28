@@ -6,8 +6,8 @@ rm(list = ls()); cat('\014')
 source('C:/siletz_tmdl/04_scripts/02_q2k/02_R/cal_functions_q2k.R')
 source('C:/siletz_tmdl/04_scripts/02_q2k/02_R/q2k_utilities.R')
 
-scen <- 'scen_030' #c('scen_005', 'scen_006', 'scen_009', 'scen_018', 'scen_019', 'scen_020')
-yrs  <- 2005 # c(2017, 2014, 2015, 2005, 2007, 2012)
+scen <- 'scen_026' #c('scen_005', 'scen_006', 'scen_009', 'scen_018', 'scen_019', 'scen_020')
+yrs  <- 2015 # c(2017, 2014, 2015, 2005, 2007, 2012)
 dtes <- data.frame(strD_cw = paste0(yrs, '-07-11'),
                    endD_cw = paste0(yrs, '-08-29'),
                    strD_sp = paste0(yrs, '-09-08'),
