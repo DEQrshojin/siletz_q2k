@@ -37,8 +37,7 @@ writeLines(tmp2, 'C:/siletz_tmdl/03_models/02_q2k/tmp2.bat')
 
 # BUILD THE MODEL RUN BATCH FILE _______________________________________________
 tmp3 <- c('@echo off', '',
-          'C:\\siletz_tmdl\\03_models\\02_q2k\\cw\\qual2kw6.exe', '',
-          'C:\\siletz_tmdl\\03_models\\02_q2k\\sp\\qual2kw6.exe')
+          'C:\\siletz_tmdl\\03_models\\02_q2k\\qual2kw6.exe')
 
 writeLines(tmp3, 'C:/siletz_tmdl/03_models/02_q2k/tmp3.bat')
 

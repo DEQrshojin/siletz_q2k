@@ -6,38 +6,33 @@ modify_q2k_inputs <- function(name = NULL, ctrF = NULL) {
   
   wDir <- 'C:/siletz_tmdl/03_models/02_q2k/'
 
-  for (x in 1 : 2) { # Iterate through each period 
+  # READ IN THE Q2K TEMPLATE FILES FOR MODIFICATION  
+  q2kF <- readLines(paste0(wDir, '/slz_q2k_wq.tpr'))
 
-    seas <- ifelse(x == 1, 'cw', 'sp')
+  # ORGANIZE & MODIFY INITIAL CONDITIONS
+  q2kF <- mod_initC(q2k = q2kF, name)
   
-    # READ IN THE Q2K TEMPLATE FILES FOR MODIFICATION  
-    q2kF <- readLines(paste0(wDir, seas, '/slz_q2k_wq_', seas, '.tpr'))
-
-    # ORGANIZE & MODIFY INITIAL CONDITIONS
-    q2kF <- mod_initC(q2kF, name, seas)
-    
-    # ORGANIZE THE MET DATA
-    q2kF <- mod_metBC(q2k = q2kF, name, seas)
-    
-    # ORGANIZE & MODIFY HEADWATER CONDITIONS
-    q2kF <- mod_hwBC(q2k = q2kF, name, seas)
-    
-    # ORGANIZE & MODIFY TRIBUTARY INFLOW CONDITIONS
-    q2kF <- mod_infBC(q2k = q2kF, name, seas)
+  # ORGANIZE THE MET DATA
+  q2kF <- mod_metBC(q2k = q2kF, name)
   
-    # WRITE TO Q2K FILE - WHEN MODIFYING PARAMETERS MODIFY THE Q2K FILE
-    writeLines(q2kF, paste0(wDir, seas, '/slz_q2k_wq.q2k'))
+  # ORGANIZE & MODIFY HEADWATER CONDITIONS
+  q2kF <- mod_hwBC(q2k = q2kF, name)
+  
+  # ORGANIZE & MODIFY TRIBUTARY INFLOW CONDITIONS
+  q2kF <- mod_infBC(q2k = q2kF, name)
 
-  }
+  # WRITE TO Q2K FILE - WHEN MODIFYING PARAMETERS MODIFY THE Q2K FILE
+  writeLines(q2kF, paste0(wDir, '/slz_q2k_wq.q2k'))
+
 }
 
 #_______________________________________________________________________________
 # MODIFY Q2K INITIAL CONDITIONS IN MODEL FILE
-mod_initC <- function(q2k = NULL, name = NULL, seas = NULL) {
+mod_initC <- function(q2k = NULL, name = NULL) {
   
   # Load the initial conditions
   intC <- read.csv(paste0('C:/siletz_tmdl/01_inputs/02_q2k/bc_intC/', name,
-                          '_intC_', seas, '.csv'), stringsAsFactors = F)
+                          '_intC.csv'), stringsAsFactors = F)
 
   bbio <- paste0('x_bbio', addZ(1 : 10), '_____x')
   
@@ -51,18 +46,18 @@ mod_initC <- function(q2k = NULL, name = NULL, seas = NULL) {
 
     tmp2 <- append(tmp2, paste0(round(intC$cnd_uSc[i], 3), ',',
                                 round(intC$iss_mgL[i], 3), ',',
-                                round(intC$do_mgL[i], 3), ',',
-                                round(intC$cs_mgL[i], 3), ',',
-                                round(intC$cf_mgL[i], 3), ',',
+                                 round(intC$do_mgL[i], 3), ',',
+                                 round(intC$cs_mgL[i], 3), ',',
+                                 round(intC$cf_mgL[i], 3), ',',
                                 round(intC$orn_ugL[i], 3), ',',
                                 round(intC$nh3_ugL[i], 3),  ',',
                                 round(intC$nox_ugL[i], 3), ',',
                                 round(intC$orp_ugL[i], 3),  ',',
                                 round(intC$po4_ugL[i], 3), ',',
-                                round(intC$phy_ugL2[i], 3), ',',
+                                round(intC$phy_ugL[i], 3), ',',
                                 round(intC$oss_mgL[i], 3), ',',
                                 round(intC$bct_cfu[i], 3),  ',',
-                                round(intC$gen_na[i], 3),  ',',
+                                 round(intC$gen_na[i], 3),  ',',
                                 round(intC$alk_mgL[i], 3)))
 
   }
@@ -81,9 +76,9 @@ mod_initC <- function(q2k = NULL, name = NULL, seas = NULL) {
 
 #_______________________________________________________________________________
 # MODIFY Q2K MET BOUNDARY CONDITIONS IN MODEL FILE
-mod_metBC <- function(q2k = NULL, name = NULL, seas = NULL) {
+mod_metBC <- function(q2k = NULL, name = NULL) {
   
-  # Load the met boundary conditions
+                                              # Load the met boundary conditions
   metC <- data.frame(dir = paste0('mt_', c('eShd', 'Ta',   'Td',   'wnd',  'CC')),
                      fil =               c('eShd', 'airT', 'dwpT', 'wndS', 'cCov'),
                      stringsAsFactors = F)
@@ -94,7 +89,7 @@ mod_metBC <- function(q2k = NULL, name = NULL, seas = NULL) {
   
   for (i in 1 : nrow(metC)) {
     mt[[i]] <- read.csv(paste0(pth, metC$dir[i], '/', name, '_', metC$fil[i],
-                               '_', seas, '.csv'), stringsAsFactors = F)
+                               '.csv'), stringsAsFactors = F)
   }
   
   # Clean  up and organize the data
@@ -103,42 +98,49 @@ mod_metBC <- function(q2k = NULL, name = NULL, seas = NULL) {
   # MODIFY MET FOR REPLACEMENT   
   tmp1 <- tmp2 <- tmp3 <- tmp4 <- NULL
   
-  for (n in 1 : (as.integer(length(mt[[1]]) / 5) + 1)) { # 5-TS BLOCK LOOP
+  for (n in 1 : (as.integer(length(mt[[1]]) / 5) + 1)) {       # 5-TS BLOCK LOOP
 
-    # Set the indeces of the 5-day block
+                                            # Set the indeces of the 5-day block
     if (n != (as.integer(length(mt[[1]]) / 5) + 1)) {
       
       indx <- (n * 5 - 4) : (n * 5)              # Calculate the sets of indeces
       
-    } else { # For the possibly incomplete last set 
+    } else {                              # For the possibly incomplete last set 
       
       mdls <- 5 * (length(mt[[1]]) / 5 - as.integer(length(mt[[1]]) / 5))
       
-      indx <- (n * 5 - 4) : (n * 5 - (5 - mdls)) # Calculate the sets of indeces
+      if (mdls != 0) {        # If the remainder isn't 0, then add the final set
+
+        indx <- (n * 5 - 4) : (n * 5 - (5 - mdls))   # Calculate sets of indeces
+                
+      } else {indx <- NULL}
       
     }
 
     tmp3 <- NULL
     
-    for (o in indx) {
+    if (!is.null(indx)) {
       
-      tmp2 <- NULL
-      
-      for (p in 1 : nrow(mt[[1]])) {
+      for (o in indx) {
         
-        tmp1 <- paste0(mt[[1]][p, o], ',', mt[[2]][p, o], ',', mt[[3]][p, o], ',',
-                       mt[[4]][p, o], ',', mt[[5]][p, o], ',', 0)
+        tmp2 <- NULL
         
-        tmp2 <- append(tmp2, tmp1) # Constitutes a 10-line block (of reaches)
+        for (p in 1 : nrow(mt[[1]])) {
+          
+          tmp1 <- paste0(mt[[1]][p, o], ',', mt[[2]][p, o], ',', mt[[3]][p, o],
+                         ',', mt[[4]][p, o], ',', mt[[5]][p, o], ',', 0)
+          
+          tmp2 <- append(tmp2, tmp1)    # Constitutes a 10-line block (of reaches)
+          
+        }
+        
+        tmp3 <- append(tmp3, tmp2)      # Constitutes a 50-line block of reach/TS
         
       }
       
-      tmp3 <- append(tmp3, tmp2) # Constitutes a 50-line block of reach/TS
-      
-    }
-    
     tmp4 <- append(tmp4, tmp3)
     
+    }
   }
 
   # Identify the line where initial conditions go
@@ -153,11 +155,11 @@ mod_metBC <- function(q2k = NULL, name = NULL, seas = NULL) {
 
 #_______________________________________________________________________________
 # MODIFY Q2K HEADWATER BOUNDARY CONDITIONS IN MODEL FILE
-mod_hwBC <- function(q2k = NULL, name = NULL, seas = NULL) {
+mod_hwBC <- function(q2k = NULL, name = NULL) {
   
   # Load the met boundary conditions
   hdwr <- read.csv(paste0('C:/siletz_tmdl/01_inputs/02_q2k/bc_hdwr/', name,
-                          '_hdwr_', seas, '.csv'), stringsAsFactors = F)
+                          '_hdwr.csv'), stringsAsFactors = F)
 
   # Remove rows 19 through 36 (They're for tailwater which I didn't use)
   hdwr <- hdwr[1 : 18, ]; row.names(hdwr) <- hdwr[, 1]; hdwr <- hdwr[, -1]
@@ -196,11 +198,11 @@ mod_hwBC <- function(q2k = NULL, name = NULL, seas = NULL) {
 
 #_______________________________________________________________________________
 # MODIFY Q2K TRIB INFLOW BOUNDARY CONDITIONS IN MODEL FILE
-mod_infBC <- function(q2k = NULL, name = NULL, seas = NULL) {
+mod_infBC <- function(q2k = NULL, name = NULL) {
   
   # Load the met boundary conditions
   infw <- read.csv(paste0('C:/siletz_tmdl/01_inputs/02_q2k/bc_infw/', name,
-                          '_infw_', seas, '.csv'), stringsAsFactors = F)
+                          '_infw.csv'), stringsAsFactors = F)
   
   # Replace the dates with time step indeces
   for (i in unique(as.numeric(infw$Reach))) {

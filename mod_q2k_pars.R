@@ -1,3 +1,5 @@
+rm(list = ls()); cat('\014')
+
 wDir <- 'C:/siletz_tmdl/03_models/02_q2k'
 
 # __________________________________________________________________________----
@@ -19,21 +21,15 @@ parV$X1 <- paste0('x_', tolower(parV$X1), '_____x')
 
 # __________________________________________________________________________----
 # READ IN THE Q2K MODEL FILES FOR MODIFICATION
-q2k1 <- readLines(paste0(wDir, '/cw/slz_q2k_wq.q2k'))
-q2k2 <- readLines(paste0(wDir, '/sp/slz_q2k_wq.q2k'))
+q2k1 <- readLines(paste0(wDir, '/slz_q2k_wq.q2k'))
 
 # Find these in the tpr file and replace with the value
-for (i in 1 : nrow(parV)) {
-	q2k1 <- gsub(parV$X1[i], parV$X2[i], q2k1)
-	q2k2 <- gsub(parV$X1[i], parV$X2[i], q2k2)
-}
+for (i in 1 : nrow(parV)) {q2k1 <- gsub(parV$X1[i], parV$X2[i], q2k1)}
 
 # WRITE NEW MODEL FILE
-q2kF1 <- file(paste0(wDir, '/cw/slz_q2k_wq.q2k'))
-q2kF2 <- file(paste0(wDir, '/sp/slz_q2k_wq.q2k'))
+q2kF1 <- file(paste0(wDir, '/slz_q2k_wq.q2k'))
 
 # Write output .q2k file
 writeLines(text = q2k1, con = q2kF1)
-writeLines(text = q2k2, con = q2kF2)
 
-close(q2kF1); close(q2kF2)
+close(q2kF1)

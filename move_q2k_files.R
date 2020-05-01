@@ -9,33 +9,21 @@ oDir <- 'C:/siletz_tmdl/02_outputs/02_q2k/'
 
 dir.create(paste0(oDir, nNme))
 
-dir.create(paste0(oDir, nNme, '/cw')); dir.create(paste0(oDir, nNme, '/sp'))
-
 mveF <- c('dynamic_MCa.txt', 'dynamic_MCb.txt', 'dynamic_MCc.txt',
           'dynamic_MCd.txt', 'slz_q2k_wq.out')
 
 delF <- c('dynamic_HTS.txt', 'dynamic_STSa.txt', 'dynamic_STSb.txt')
 
-for (i in 1 : 2) {
+# Delete files
+file.remove(paste0(wDir, '/', delF))
 
-  seas <- ifelse(i == 1, 'cw', 'sp')
-  
-  tDir <- paste0(wDir, seas)
-  
-  # Delete files
-  file.remove(paste0(tDir, '/', delF))
-  
-  # Move files
-  fFil <- paste0(tDir, '/', mveF)
-  
-  tFil <- paste0(oDir, nNme, '/', seas, '/', mveF)
-  
-  file.rename(fFil, tFil)
-  
-}
+# Move files
+fFil <- paste0(wDir, '/', mveF)
+
+tFil <- paste0(oDir, nNme, '/', mveF)
+
+file.rename(fFil, tFil)
 
 # Archive the Q2K files
-dir.create(paste0(wDir, 'archive/', nNme))
-
-file.rename(paste0(wDir, c('cw', 'sp'), '/slz_q2k_wq.q2k'),
-            paste0(wDir, 'archive/', nNme, '/slz_q2k_wq_', c('cw', 'sp'), '.q2k'))
+file.rename(paste0(wDir, '/slz_q2k_wq.q2k'),
+            paste0(wDir, 'archive/', nNme, '_slz_q2k_wq.q2k'))

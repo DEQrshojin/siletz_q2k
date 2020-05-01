@@ -171,8 +171,12 @@ hspf_q2k <- function(cOut = NULL, dir = NULL, nme = NULL) {
 # PROCESS LSWCD DATA ----
 lswcd_q2k <- function(cOut = NULL, dir = NULL, nme = NULL) {
   
+  # Calculate TEMP using air temp first - fill in with 2017 data where it exists
+  cOut <- airT_corr_q2k(cOut = cOut, dir = dir, nme = nme)
+  
   # Reads the LSWCD data and returns the Q2K boundary condition object with
   # DO and temperature boundaries.
+  
   # Pass the BC object (cOut) and location of the HSPF data (.RData) files (dir)
   lswc <- read.csv(paste0('C:/siletz_misc/from_tmdl_drive/001_data/wq_data/Mon',
                           'itoring 2017/LSWCD/Lincoln_SWCD_SILETZ RIVER_06292017',
@@ -192,48 +196,42 @@ lswcd_q2k <- function(cOut = NULL, dir = NULL, nme = NULL) {
 
   qlc <- qlc[[1]][which(qlc[[1]]$Date %in% cOut[[1]]$date), 1 : 3]
   
-  # Isolate the Moonshine station data -- these data will form the basis of the
-  # other temperature boundary conditions, including the headwaters.
+  # Isolate Moonshine data: forms basis of other T bcs including HW
+  # Also isolate TSs in cOut for which moonshine data exist
+  cnd1 <- which(cOut[[1]]$date %in% lswc$DATE.TIME[which(lswc$STAID == 37396)])
+  
   moon <- lswc[which(lswc$STAID == 37396 & lswc$DATE.TIME %in% cOut[[1]]$date), ]
+
+  # Perform correlations; start with confluence first: mix Nth & Sth Q & T
+  temp <- data.frame(date = moon$DATE.TIME,
+                     tmpN = regF(m = regs$m[1], b = regs$b[1], x = moon$TEMP_C),
+                     tmpS = regF(m = regs$m[2], b = regs$b[2], x = moon$TEMP_C),
+                     stringsAsFactors = F)
+
+  temp <- merge(qlc, temp, by.x = 'Date', by.y = 'date', all.x = T, all.y = T)
+
+  # Calculate the mixed T for LSWCD data, don't worry about NAs
+  temp$tMix <- (temp$Bas1 * temp$tmpN + temp$Bas2 * temp$tmpS) / (temp$Bas1 + temp$Bas2)
+
+  cOut[['HW']]$tmp_dgC[cnd1] <- temp$tMix[cnd1]
   
-  # Perform the correlations - start with the confluence first, which requires 
-  # mixing the north and south confluence flow and temps. First trim to dates
-  # Mix and populate the output (cOut) list headwater temperatures
-  cOut[[1]]$tmp_dgC <- (regF(m = regs$m[1], b = regs$b[1], x = moon$TEMP_C) * qlc$Bas1 +
-                        regF(m = regs$m[2], b = regs$b[2], x = moon$TEMP_C) * qlc$Bas2) /
-                       (qlc$Bas1 + qlc$Bas2)
-  
-  # Populate inflow temp bcs; use regressions for Rock Creek for consistency
-  for (i in 2 : (length(cOut) - 1)) {cOut[[i]]$tmp_dgC <- regF(m = regs$m[i + 1],
-                                                               b = regs$b[i + 1],
-                                                               x = moon$TEMP_C)}
-  
-  # Populate inflow DO bcs. Assume 100% saturation
+  # Populate inflow temp DO bcs; use regressions for Moonshine for consistency
   for (i in 1 : (length(cOut) - 1)) {
-    
+    if (i > 1) {
+      cOut[[i]]$tmp_dgC[cnd1] <- regF(m = regs$m[i + 1], b = regs$b[i + 1],
+                                      x = moon$TEMP_C)
+    }
     cOut[[i]]$do_mgL <- do_sat(temp = cOut[[i]]$tmp_dgC, elev = regs$elv[i + 1])
-    
   }
 
   # Initial conditions; select all data from start date (strD)
   iniC <- lswc[which(lswc$DATE.TIME == cOut[[1]]$date[1]), c(1, 3, 5, 7)]
   
-  # Assign based on location and period of record
-  if (month(cOut[[1]]$date[1]) < 8) {
-    
-    # Assignments: 1. 38944 - 15 & 16; 2. 38300 - 14; 3. 10391 - 12 & 13;
-    #              4. 38918 - 7, 8, 11; 5. 37396 - 3 & 6
-    assn <- c(5, 5, 4, 4, 4, 3, 3, 2, 1, 1)
-    
-  } else {
-    
-    # Assignments: 1. 36367 - 15 & 16; 2. 38300 - 14; 3. 37848 - 12 & 13
-    #              4. 38918 - 11; 5. 38928 - 8; 6. 11246 - 7; 7. 37396 - 3 & 6
-    assn <- c(7, 7, 6, 5, 4, 3, 3, 2, 1, 1)
-    
+  # Initial conditions; select all data from start date (strD)
+  for (i in 1 : nrow(cOut[['Init']])) {
+    cOut[['Init']][i, 2] <- cOut[[i + 1]]$tmp_dgC[1]
+    cOut[['Init']][i, 5] <- cOut[[i + 1]]$do_mgL[1]
   }
-  
-  cOut[[13]]$tmp_dgC <- iniC[assn, 3]; cOut[[13]]$do_mgL <- iniC[assn, 4]
   
   return(cOut)
 
@@ -530,7 +528,7 @@ deq_grab_q2k <- function(cOut = NULL) {
   # SET CBOD & PHYTO INIT Cs
   cOut[['Init']]$cf_mgL <- 0.1 * 1.46; 
   
-  cOut[['Init']]$phy_ugL2 <- c(rep(0.3, 4), rep(0.4, 6))
+  cOut[['Init']]$phy_ugL <- c(rep(0.3, 4), rep(0.4, 6))
   
   return(cOut)
   
@@ -538,8 +536,7 @@ deq_grab_q2k <- function(cOut = NULL) {
 
 # __________________________________________________________________________----
 # WRITE BCs TO CSVs ----
-write_bcs_q2k <- function(cOut = NULL, oPth = NULL, sveRDS = NULL,
-                          name = NULL, seas = NULL) {
+write_bcs_q2k <- function(cOut = NULL, oPth = NULL, name = NULL) {
   
   # Function to output the bc object elements to csv files for input to Q2K
   # arguements include the bc object, output directory, optional name to save
@@ -582,7 +579,7 @@ write_bcs_q2k <- function(cOut = NULL, oPth = NULL, sveRDS = NULL,
                      fils = c('hdwr',    'infw',    'intC'))
 
   # WRITE TO CSV 
-  oFil <- paste0(oPth, '/', oFil$pths, '/', name, '_', oFil$fils, '_', seas, '.csv')  
+  oFil <- paste0(oPth, '/', oFil$pths, '/', name, '_', oFil$fils, '.csv')
 
   # Write Headwater/Tailwater
   write.csv(x = hwtw, file = oFil[1])
@@ -593,10 +590,6 @@ write_bcs_q2k <- function(cOut = NULL, oPth = NULL, sveRDS = NULL,
   # Write Initial Conditions
   write.csv(cOut[['Init']][2 : length(cOut[['Init']])],
               file = oFil[3], row.names = F)  
-  
-  if (!is.null(sveRDS)) {
-    saveRDS(object = cOut, file = paste0(oPth, sveRDS, '.RData'))
-  }
   
 }
 
@@ -680,7 +673,7 @@ stp_bcs <- function(cOut = NULL, stp = NULL, q2kR = NULL) {
   stp$Q_E <- stp$Q_E * 4.3812636389e-2; stpM$q_e <- stpM$q_e * 4.3812636389e-2
   
   # Forward fill the gaps for missing dates
-  stp <- fill(stp, 2 : 15, .direction = 'up')
+  stp <- stp %>% tidyr::fill(everything(), .direction = 'up')
 
   # Pull out dataframe for river, STP reach, and mixed WQ
   rivr <- wwtp <- cOut[[q2kR + 1]]

@@ -1,33 +1,27 @@
 # Function that serves as wrapper to analyzing DO and temperature data
 DO_analysis <- function(scen = NULL, wudy = NULL, strD = NULL) {
   
-  fils <- paste0('C:/siletz_tmdl/02_outputs/02_q2k/', scen, c('/cw', '/sp'))
+  fils <- paste0('C:/siletz_tmdl/02_outputs/02_q2k/', scen)
 
   pars <- c('Temp', 'DissO2', 'DOsat')
   
-  mOut <- list(cw = read_q2k_out_2(mOut = fils[1], pars = pars,
-                                   strD = strD[1], wudy = wudy[1]),
-               sp = read_q2k_out_2(mOut = fils[2], pars = pars,
-                                   strD = strD[2], wudy = wudy[2]))
+  mOut <- read_q2k_out_2(mOut = fils, pars = pars, strD = strD, wudy = wudy)
 
-  names(mOut[[1]]) <- names(mOut[[2]]) <- c('rch', 'dst', 'tme',
-                                            'tmp', 'doc', 'sdo')
+  names(mOut) <- c('rch', 'dst', 'tme', 'tmp', 'doc', 'sdo')
 
   # Organize and pre-process the results 
-  for (i in 1 : 2) {
-    
-    # Calculate DO saturation (%)
-    mOut[[i]] <- calc_DO_sat(df = mOut[[i]])
-    
-    # Return the date (without hour) of each timestep
-    mOut[[i]]$dte <- floor_date(mOut[[i]]$tme, 'day')
-    
-  }
+  # Calculate DO saturation (%)
+  mOut <- calc_DO_sat(df = mOut)
+  
+  # Return the date (without hour) of each timestep
+  mOut$dte <- floor_date(mOut$tme, 'day')
 
   # Read in result constituent specs (pars, criteria, stat base, and graphing)
   cnst <- read.csv('C:/siletz_tmdl/02_outputs/02_q2k/graph_specs_II.csv',
                    stringsAsFactors = F)
 
+  # STOPPED WORKING HERE!!
+  
   # Create the processed results object (list of all of the constituents)
   dOut <- list()
   
@@ -60,6 +54,8 @@ DO_analysis <- function(scen = NULL, wudy = NULL, strD = NULL) {
     
   }
 
+  # STOPPED WORKING HERE!!
+  
   return(dOut)
   
 }
