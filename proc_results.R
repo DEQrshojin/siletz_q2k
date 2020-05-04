@@ -5,58 +5,67 @@ DO_analysis <- function(scen = NULL, wudy = NULL, strD = NULL) {
 
   pars <- c('Temp', 'DissO2', 'DOsat')
   
-  mOut <- read_q2k_out_2(mOut = fils, pars = pars, strD = strD, wudy = wudy)
+  # mOut <- read_q2k_out_2(mOut = fils, pars = pars, strD = strD, wudy = wudy)
+  
+  mOut <- readRDS('C:/siletz_tmdl/02_outputs/02_q2k/YR17/temp.RData')
+  
+  # saveRDS(mOut, 'C:/siletz_tmdl/02_outputs/02_q2k/YR17/temp.RData')
 
   names(mOut) <- c('rch', 'dst', 'tme', 'tmp', 'doc', 'sdo')
 
-  # Organize and pre-process the results 
-  # Calculate DO saturation (%)
+  # Remove reach 0 (HW) -- trivial
+  mOut <- mOut[-which(mOut$rch == 0), ]
+
+  # Calculate DO saturation (%) and capped DO sat (%)
   mOut <- calc_DO_sat(df = mOut)
   
   # Return the date (without hour) of each timestep
   mOut$dte <- floor_date(mOut$tme, 'day')
 
   # Read in result constituent specs (pars, criteria, stat base, and graphing)
-  cnst <- read.csv('C:/siletz_tmdl/02_outputs/02_q2k/graph_specs_II.csv',
+  cnst <- read.csv('C:/siletz_tmdl/02_outputs/02_q2k/graph_specs_IV.csv',
                    stringsAsFactors = F)
 
-  # STOPPED WORKING HERE!!
+  # Convert the constituent dates to POSIX
+  for (i in 8 : 10) {
+    cnst[, i] <- as.POSIXct(cnst[, i], '%m/%d/%Y', tz = 'America/Los_Angeles')
+  }
   
-  # Create the processed results object (list of all of the constituents)
-  dOut <- list()
+  # Calculate daily min/mean/max for each constituent
+  dOut <- mOut %>% group_by(rch, dte) %>%
+                   summarize(tmpI = min(tmp), tmpN = mean(tmp), tmpX = max(tmp),
+                             docI = min(doc), docN = mean(doc), docX = max(doc),
+                             dosI = min(dos), dosN = mean(dos), dosX = max(dos),
+                             dopI = min(dos_cap), dopN = mean(dos_cap),
+                             dopX = max(dos_cap))
   
-  for (i in 1 : nrow(cnst)) { # Loop through the constituents
+  # Calculate statistical base for comparisons (e.g., 7DADM)
+  sOut <- list()
+
+  # Cutoff date for return of statistical information
+  coDt <- as.POSIXct(paste0(year(mOut$dte[1]), '-09-01'), '%Y-%m-%d',
+                     tz = 'America/Los_Angeles')
+  
+  for (i in 1 : 8) {
+  
+    sOut[[i]] <- rolling_mean(df = dOut[, c(1, 2, cnst$cCol[i])],
+                              nday = cnst$nday[i])
     
-    if (is.na(cnst$nday[i])) {
-
-      dOut[[i]]      <- mOut[[cnst$seas[i]]][, c(1, 3, cnst$cCol[i])]
+    names(sOut)[i] <- cnst$name[i]
+    
+    if (cnst$seas[i] == 'cw') {
       
-      dOut[[i]]$stat <- dOut[[i]][, 3]; dOut[[i]]$flag <- 1
+      sOut[[i]] <- sOut[[i]][which(sOut[[i]]$dte < coDt), ]
       
-      names(dOut)[i] <- cnst$name[i]
-
     } else {
       
-      temp           <- mOut[[cnst$seas[i]]][, c(1, 8, cnst$cCol[i])]
-      
-      temp <- aggregate(temp[, 3], by = list(temp$rch, temp$dte),
-                        FUN = cnst$sttD[i])
-      
-      names(temp) <- c('rch', 'dte', cnst$parm[i])
-      
-      dOut[[i]] <- rolling_mean(df = temp, nday = cnst$nday[i])
-
+      sOut[[i]] <- sOut[[i]][which(sOut[[i]]$dte >= coDt), ]
+    
     }
-    
-    names(dOut[[i]])[2] <- 'dte'
-    
-    names(dOut)[i] <- cnst$name[i]
-    
+      
   }
 
-  # STOPPED WORKING HERE!!
-  
-  return(dOut)
+  return(sOut)
   
 }
 
@@ -106,13 +115,13 @@ rolling_mean <- function(df = NULL, nday = NULL) {
       
       if (n < nday) { # Rolling average for less than nday
         
-        temp$stat[n] <- mean(temp[1 : n, 3], na.rm = T)
+        temp$stat[n] <- mean(unlist(temp[1 : n, 3]), na.rm = T)
         
         temp$flag[n] <- -1 # Indicate that the stat has fewer days than nday
         
       } else {        # Rolling average for more than nday
         
-        temp$stat[n] <- mean(temp[(n - (nday - 1)) : n, 3], na.rm = T)
+        temp$stat[n] <- mean(unlist(temp[(n - (nday - 1)) : n, 3]), na.rm = T)
         
         temp$flag[n] <- 1 # Stat has sufficient number of days to calulate stat
         
@@ -259,7 +268,7 @@ read_q2k_out_2 <- function(mOut = NULL, pars = NULL, strD = NULL, wudy = NULL) {
 graph_output <- function(df = NULL, scen = NULL, path = NULL, n = NULL) {
   
   # Read in result specs (pars, criteria, stat base, and graphing)
-  g <- read.csv('C:/siletz_tmdl/02_outputs/02_q2k/graph_specs_II.csv',
+  g <- read.csv('C:/siletz_tmdl/02_outputs/02_q2k/graph_specs_IV.csv',
                 stringsAsFactors = F)[n, ]
   
   # Convert dates to POSIX
@@ -267,8 +276,8 @@ graph_output <- function(df = NULL, scen = NULL, path = NULL, n = NULL) {
     g[, x] <- as.POSIXct(g[, x], '%m/%d/%Y', tz = 'America/Los_Angeles')
   }
   
-  # Rename reach col for graphing, and remove HW (reach = 0)
-  names(df)[1] <- 'Reach'; df <- df[-which(df$Reach == 0), ]
+  # Rename reach col for graphing
+  names(df)[1] <- 'Reach'
   
   # GRAPH, PART 1 - Essential components (not comparing to standard)
   pl <- ggplot(data = df, aes(x = dte, y = stat)) + theme_classic () +
