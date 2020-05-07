@@ -1,5 +1,3 @@
-rm(list = ls()); cat('\014')
-
 suppressMessages(library(dplyr)); suppressMessages(library(lubridate))
 
 # LOAD FUNCTIONS, VARS & DATA ----
@@ -15,14 +13,22 @@ if (substr(a, nchar(a), nchar(a)) != '/') {ctrF$oDir <- paste0(ctrF$oDir, '/')}
 
 tz = 'America/Los_Angeles'
 
-# Create a data frame with all of the iterable components
 strD <- as.POSIXct(ctrF$str1, '%Y-%m-%d', tz = tz)
+
 endD <- as.POSIXct(ctrF$end1, '%Y-%m-%d', tz = tz)
+
+year <- paste0('YR', addZ(year(strD) - 2000))
+
 wrmU <- as.numeric(ctrF$wrm1)
 
 x <- readRDS(paste0(ctrF$mDir, 'met_data_4_Q2Kw.RData'))
 
 dirV <- c('mt_Ta', 'mt_Td', 'mt_CC', 'mt_wnd', 'mt_eShd')
+
+newD <- paste0(ctrF$oDir, dirV, '/', nNme$name)
+
+# Create new folders for scenario inputs
+for (i in 1 : length(dirV)) {if (!file.exists(newD[i])) {dir.create(newD[i])}}
 
 if (wrmU == 0) {nday = NULL} else {nday = wrmU}
 
@@ -37,8 +43,7 @@ if (ctrF$airT == 'TRUE') {
                           mdfy = ctrF$mdTa)
   }
   
-  write.csv(x = airT, row.names = F,
-            file = paste0(ctrF$oDir, dirV[1], '/', nNme$name, '_airT.csv'))
+  write.csv(airT, paste0(newD[1], '/airT_', year, '.csv'), row.names = F)
 
 }
 
@@ -53,8 +58,7 @@ if (ctrF$dwpT == 'TRUE') {
                           mdfy = ctrF$mdTd)
   }
   
-  write.csv(x = dwpT, row.names = F,
-            file = paste0(ctrF$oDir, dirV[2], '/', nNme$name, '_dwpT.csv'))
+  write.csv(dwpT, paste0(newD[2], '/dwpT_', year, '.csv'), row.names = F)
 
 }
 
@@ -62,17 +66,12 @@ if (ctrF$dwpT == 'TRUE') {
 if (ctrF$cCov == 'TRUE') {
   
   cCov <- cloud_q2k(x = x, strD = strD, endD = endD, nday = nday)
-  
-  # # Hard code this modification in 
-  # d <- as.POSIXct(c('2017-07-07', '2017-08-29'), '%Y-%m-%d',
-  #                 tz = 'America/Los_Angeles')
-  
+
   if (length(ctrF$mdCc) != 0 & length(ctrF$mdCc) != 1) {
     cCov <- modify_met_df(df = cCov, strD = strD, endD = endD, mdfy = ctrF$mdCc)
   }
   
-  write.csv(x = cCov, row.names = F,
-            file = paste0(ctrF$oDir, dirV[3], '/', nNme$name, '_cCov.csv'))
+  write.csv(cCov, paste0(newD[3], '/cCov_', year, '.csv'), row.names = F)
 
 }
 
@@ -85,8 +84,7 @@ if (ctrF$wndU == 'TRUE') {
     wndU <- modify_met_df(df = wndU, strD = strD, endD = endD, mdfy = ctrF$mdWs)
   }
   
-  write.csv(x = wndU, row.names = F,
-            file = paste0(ctrF$oDir, dirV[4], '/', nNme$name, '_wndS.csv'))
+  write.csv(wndU, paste0(newD[4], '/wndS_', year, '.csv'), row.names = F)
 
 }
 
@@ -98,8 +96,7 @@ if (ctrF$eShd == 'TRUE') {
   
   eShd <- effshd_4_q2k(ES = allD, strD = strD, endD = endD, nday = nday)
   
-  write.csv(x = eShd, row.names = F,
-            file = paste0(ctrF$oDir, dirV[5], '/', nNme$name, '_eShd.csv'))
+  write.csv(x = eShd, paste0(newD[5], '/eShd_', year, '.csv'), row.names = F)
 
 } else {
   

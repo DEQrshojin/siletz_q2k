@@ -8,20 +8,60 @@ source('C:/siletz_tmdl/04_scripts/02_q2k/02_R/cal_functions_q2k.R')
 source('C:/siletz_tmdl/04_scripts/02_q2k/02_R/proc_results.R')
 source('C:/siletz_tmdl/04_scripts/01_hspf/02_R/fnct_utilities_hspf.R')
 
+# Variables
 scen <- unlist(read_ctrF_H()[1])
 
 pth <- paste0('C:/siletz_tmdl/02_outputs/02_q2k/', scen)
 
+year <- 2004 : 2017
+
+yr <- paste0("YR", addZ(year - 2000))
+
+# Create the folders for outputs (if necessary)
 if (!file.exists(pth)) {dir.create(pth)}
 
-# Process the results
-data <- DO_analysis(scen = scen, wudy = 7, strD = '2017-07-08')
+if (!file.exists(pth)) {dir.create(paste0(pth, '/summary'))}
 
-for (i in 1 : 8) {
+if (!file.exists(pth)) {dir.create(paste0(pth, '/figures'))}
 
-  write.csv(file = paste0(pth, '/', scen, '_', names(data)[i], '.csv'),
-            x = data[[i]], row.names = F)
+for (i in 1 : length(year)) {
+  
+  a <- Sys.time()
+  
+  # Process the results
+  data <- DO_analysis(scen = scen, wudy = 7, strD = paste0(year[i], '-07-08'))
+  
+  for (j in 1 : 8) {
+    graph_output(df = data[[j]], scen = scen, path = paste0(pth, '/figures'), n = j)
+  }
 
-  graph_output(df = data[[i]], scen = scen, path = pth, n = i)
+  data[['daily_stats']] <- graph_ts(df = data[['daily_stats']], scen = scen,
+                                    path = paste0(pth, '/figures'))
+
+  b <- round(Sys.time() - a, 2); c <- units(b)
+  
+  if (i == 1) {
+    
+    rslt <- data
+    
+  } else { 
+    
+    for (k in 1 : length(data)) { 
+      
+      rslt[[k]] <- rbind(rslt[[k]], data[[k]])
+      
+    }
+  }
+  
+  cat(paste0('Processing ', year[i], ' results completed in ', b, ' ', c, '.\n\n'))
 
 }
+
+# Print the results out:
+for (k in 1 : length(rslt)) { 
+  
+  write.csv(x = rslt[[k]], file = paste0(pth, '/summary/', names(rslt)[k], '.csv'), 
+            row.names = F)
+  
+}
+

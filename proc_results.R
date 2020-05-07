@@ -2,30 +2,26 @@
 DO_analysis <- function(scen = NULL, wudy = NULL, strD = NULL) {
   
   fils <- paste0('C:/siletz_tmdl/02_outputs/02_q2k/', scen)
-
+  
   pars <- c('Temp', 'DissO2', 'DOsat')
   
-  # mOut <- read_q2k_out_2(mOut = fils, pars = pars, strD = strD, wudy = wudy)
-  
-  mOut <- readRDS('C:/siletz_tmdl/02_outputs/02_q2k/YR17/temp.RData')
-  
-  # saveRDS(mOut, 'C:/siletz_tmdl/02_outputs/02_q2k/YR17/temp.RData')
+  mOut <- read_q2k_out_2(mOut = fils, pars = pars, strD = strD, wudy = wudy)
 
   names(mOut) <- c('rch', 'dst', 'tme', 'tmp', 'doc', 'sdo')
-
+  
   # Remove reach 0 (HW) -- trivial
   mOut <- mOut[-which(mOut$rch == 0), ]
-
+  
   # Calculate DO saturation (%) and capped DO sat (%)
   mOut <- calc_DO_sat(df = mOut)
   
   # Return the date (without hour) of each timestep
   mOut$dte <- floor_date(mOut$tme, 'day')
-
+  
   # Read in result constituent specs (pars, criteria, stat base, and graphing)
   cnst <- read.csv('C:/siletz_tmdl/02_outputs/02_q2k/graph_specs_IV.csv',
                    stringsAsFactors = F)
-
+  
   # Convert the constituent dates to POSIX
   for (i in 8 : 10) {
     cnst[, i] <- as.POSIXct(cnst[, i], '%m/%d/%Y', tz = 'America/Los_Angeles')
@@ -33,38 +29,40 @@ DO_analysis <- function(scen = NULL, wudy = NULL, strD = NULL) {
   
   # Calculate daily min/mean/max for each constituent
   dOut <- mOut %>% group_by(rch, dte) %>%
-                   summarize(tmpI = min(tmp), tmpN = mean(tmp), tmpX = max(tmp),
-                             docI = min(doc), docN = mean(doc), docX = max(doc),
-                             dosI = min(dos), dosN = mean(dos), dosX = max(dos),
-                             dopI = min(dos_cap), dopN = mean(dos_cap),
-                             dopX = max(dos_cap))
-  
+          summarize(tmpI = min(tmp), tmpN = mean(tmp), tmpX = max(tmp),
+                    docI = min(doc), docN = mean(doc), docX = max(doc),
+                    dosI = min(dos), dosN = mean(dos), dosX = max(dos),
+                    dopI = min(dos_cap), dopN = mean(dos_cap),
+                    dopX = max(dos_cap))
+        
   # Calculate statistical base for comparisons (e.g., 7DADM)
   sOut <- list()
-
+  
   # Cutoff date for return of statistical information
   coDt <- as.POSIXct(paste0(year(mOut$dte[1]), '-09-01'), '%Y-%m-%d',
                      tz = 'America/Los_Angeles')
   
   for (i in 1 : 8) {
-  
+    
     sOut[[i]] <- rolling_mean(df = dOut[, c(1, 2, cnst$cCol[i])],
                               nday = cnst$nday[i])
     
     names(sOut)[i] <- cnst$name[i]
     
-    if (cnst$seas[i] == 'cw') {
+    if (cnst$seas[i] == 'cw') { 
       
       sOut[[i]] <- sOut[[i]][which(sOut[[i]]$dte < coDt), ]
       
     } else {
       
       sOut[[i]] <- sOut[[i]][which(sOut[[i]]$dte >= coDt), ]
-    
-    }
       
+    }
+    
   }
-
+  
+  sOut[[i + 1]] <- dOut; names(sOut)[i + 1] <- 'daily_stats'
+  
   return(sOut)
   
 }
@@ -78,10 +76,10 @@ remove_wudy <- function(df = NULL, wudy = NULL, strD) {
   
   # Time - convert from days to seconds and convert to POSIXct
   df$Time <- as.POSIXct(df$Time * 86400, origin = strD,
-                       tz = 'America/Los_Angeles') + hours(7)
+                        tz = 'America/Los_Angeles') + hours(7)
   
   return(df)
-
+  
 }
 
 # Function to calculate DO saturation (as %) from DO conc and sat DO conc
@@ -137,14 +135,16 @@ rolling_mean <- function(df = NULL, nday = NULL) {
 }
 
 # Function that returns the headers of the QUAL2Kw output files (full)
-read_headers <- function(mOut = NULL) {
+read_headers <- function(mOut = NULL, strD = NULL) {
+  
+  year <- paste0('YR', addZ(as.numeric(substr(strD, 1, 4)) - 2000))
   
   if (substr(mOut, nchar(mOut), nchar(mOut)) != '/') {mOut <- paste0(mOut, '/')}
   
   exts <- c('a', 'b', 'c', 'd')
   
-  mOut <- paste0(mOut, 'dynamic_MC', exts, '.txt')
-  
+  mOut <- paste0(mOut, 'dynamic_MC', exts, '_', year, '.txt')
+
   # Read in the headers
   hd <- list()
   
@@ -186,8 +186,10 @@ read_headers <- function(mOut = NULL) {
 # Function to read and pre-process Q2K data output files (dynamic_MC)
 read_q2k_out_2 <- function(mOut = NULL, pars = NULL, strD = NULL, wudy = NULL) {
   
+  year <- paste0('YR', addZ(as.numeric(substr(strD, 1, 4)) - 2000))
+  
   # Read in the header column names and file metadata
-  hdrs <- read_headers(mOut)
+  hdrs <- read_headers(mOut, strD)
   
   # Standardize parameter names and selected pars by coercing to lower case
   parm <- hdrs$parm; par2 <- tolower(pars)
@@ -223,9 +225,10 @@ read_q2k_out_2 <- function(mOut = NULL, pars = NULL, strD = NULL, wudy = NULL) {
   if (substr(mOut, nchar(mOut), nchar(mOut)) != '/') {mOut <- paste0(mOut, '/')}  
   
   for (i in 1 : length(unique(keep$fils))) {
-
+    
     # Read in the data from the file
-    temp <- readLines(paste0(mOut, 'dynamic_MC', unique(keep$fils)[i], '.txt'))
+    temp <- readLines(paste0(mOut, 'dynamic_MC', unique(keep$fils)[i], '_',
+                             year, '.txt'))
     
     # Create a data frame from the data
     temp <- data.frame(do.call("rbind", strsplit(temp, "\\s+")),
@@ -233,7 +236,7 @@ read_q2k_out_2 <- function(mOut = NULL, pars = NULL, strD = NULL, wudy = NULL) {
     
     # Keep the columns from the requested parameters
     temp <- temp[, keep$cols[which(keep$fils == unique(keep$fils)[i])]]
-
+    
     # Rename columns, clean up the data, and make numeric
     if (!is.data.frame(temp)) {
       
@@ -242,7 +245,7 @@ read_q2k_out_2 <- function(mOut = NULL, pars = NULL, strD = NULL, wudy = NULL) {
       temp <- data.frame(temp, stringsAsFactors = F)
       
       names(temp) <- keep$parm[which(keep$fils == unique(keep$fils)[i])]
-        
+      
     } else {
       
       names(temp) <- temp[1, ]; temp <- temp[-(1 : 2), ]
@@ -251,7 +254,7 @@ read_q2k_out_2 <- function(mOut = NULL, pars = NULL, strD = NULL, wudy = NULL) {
                          stringsAsFactors = F)
       
     }
-
+    
     # Combine all of the data to create the output  
     if (i == 1) {data <- temp} else {data <- cbind(data, temp)}
     
@@ -259,13 +262,18 @@ read_q2k_out_2 <- function(mOut = NULL, pars = NULL, strD = NULL, wudy = NULL) {
   
   # Remove the warm-up days (wudy)
   if(!is.null(wudy)) {data <- remove_wudy(df = data, wudy = wudy, strD = strD)}
-
+  
   return(data)
   
 }
 
 # Graph the full suite of figures for periods & criteria
 graph_output <- function(df = NULL, scen = NULL, path = NULL, n = NULL) {
+  
+  # Detect the year for saving the files
+  year <- paste0("YR", addZ(year(df$dte[1]) - 2000))
+  
+  year(df$dte) <- 2017
   
   # Read in result specs (pars, criteria, stat base, and graphing)
   g <- read.csv('C:/siletz_tmdl/02_outputs/02_q2k/graph_specs_IV.csv',
@@ -285,7 +293,7 @@ graph_output <- function(df = NULL, scen = NULL, path = NULL, n = NULL) {
         ylab(g$ylab) + scale_y_continuous(limits = c(g$ymin, g$ymax)) +    
         scale_x_datetime(limits = c(g$dte1, g$dte2)) +
         facet_wrap(.~ Reach, ncol = 2, labeller = label_both)
-  
+
   if (is.na(g$nday)) {
     
     pl <- pl + theme(legend.position   = 'none',
@@ -316,15 +324,11 @@ graph_output <- function(df = NULL, scen = NULL, path = NULL, n = NULL) {
     # Stardard graph label (label = wrds; x = date; y = value)
     plce <- data.frame(wrds = paste0('Standard = ', g$stnd, ' ', g$unit),
                        dte  = g$dteP, stat = g$stdP)
-    
-    lgnd <- paste0(c('Fewer', '  More'), ' than ', g$asmP,
-                   ' days of predictions')
-    
-    pl <- pl + scale_linetype_manual(values = c(6, 1), labels = lgnd) +  
+
+    pl <- pl + geom_text(data = plce, label = plce$wrds, hjust = g$hjst,
+                         vjust = g$vjst, size = 3.25) +
           geom_segment(aes(x = g$dte1, xend = g$dte2, y = g$stnd, yend = g$stnd),
                        color = 'darkblue', linetype = 2) +
-          geom_text(data = plce, label = plce$wrds, hjust = g$hjst,
-                    vjust = g$vjst, size = 3.25) +
           theme(legend.position   = c(g$lgd1, g$lgd2),
                 legend.direction  = 'horizontal',
                 legend.background = element_blank(),
@@ -335,9 +339,101 @@ graph_output <- function(df = NULL, scen = NULL, path = NULL, n = NULL) {
                 axis.title.x      = element_blank(),
                 strip.text        = element_text(size = 12))
     
+    if (length(unique(df$flag)) != 1) {
+      
+      lgnd <- paste0(c('Fewer', '  More'), ' than ', g$asmP,
+                     ' days of predictions')
+
+      pl <- pl + scale_linetype_manual(values = c(6, 1), labels = lgnd)
+
+    } else {
+      
+      pl <- pl + theme(legend.position = 'none')
+      
+    }
+
   }
-  
-  ggsave(filename = paste0(path, '/', scen, '_', g$name, '.png'), plot = pl,
-         width = 11, height = 8.5, units = 'in', dpi = 300)
+
+  ggsave(filename = paste0(path, '/', g$name, '_', year, '.png'),
+         plot = pl, width = 11, height = 8.5, units = 'in', dpi = 300)
   
 }
+
+graph_ts <- function(df = NULL, scen = NULL, path = NULL) {
+
+  # Detect the year for saving the files
+  year <- paste0("YR", addZ(year(df$dte[1]) - 2000))
+  
+  year(df$dte) <- 2017
+
+  # Rename reach col for graphing
+  names(df)[1] <- 'Reach'
+  
+  subs <- data.frame(lblT = c('tmpI', 'tmpN', 'tmpX'), 
+                     lblC = c('docI', 'docN', 'docX'),
+                     lblS = c('dosI', 'dosN', 'dosX'),
+                     lblG = c('Daily minimum', 'Daily mean', 'Daily maximum'),
+                     stringsAsFactors = F)
+  
+  ts <- list()
+
+  for (i in 1 : 3) {
+
+    ts[[i]] <- reshape2::melt(df[, c(1, 2, (i * 3) + (0 : 2))],
+                              id.vars = c('Reach', 'dte'),
+                              value.name = 'valu',
+                              variable.name = 'stat')
+    
+    for (j in 1 : 3) {ts[[i]]$stat <- gsub(subs[j, i], subs[j, 4], ts[[i]]$stat)}
+    
+  }
+
+  # Read in result specs (pars, criteria, stat base, and graphing)
+  g <- read.csv('C:/siletz_tmdl/02_outputs/02_q2k/graph_specs_ts.csv',
+                stringsAsFactors = F)
+  
+  # Convert dates to POSIXc
+  for (x in 3 : 5) {
+    g[, x] <- as.POSIXct(g[, x], '%m/%d/%Y', tz = 'America/Los_Angeles')
+  }
+  
+  for (i in 1 : 3) {
+
+    pl <- ggplot(data = ts[[i]], aes(x = dte, y = valu, color = stat)) +
+          theme_classic () + geom_line(size = 0.7) + ylab(g$ylab[i]) +
+          scale_y_continuous(limits = c(g$ymin[i], g$ymax[i])) +    
+          scale_x_datetime(limits = c(g$dte1[i], g$dte2[i])) +
+          facet_wrap(.~ Reach, ncol = 2, labeller = label_both) +
+          scale_color_manual(values = c('darkgray', 'black', 'darkgray')) +
+          geom_segment(aes(x = g$dte1[i], y = g$std1[i],
+                           xend = g$dteC[i], yend = g$std1[i]),
+                       size = 0.6, linetype = 'dashed', color = 'black') + 
+          geom_segment(aes(x = g$dteC[i], y = g$std2[i],
+                           xend = g$dte2[i], yend = g$std2[i]),
+                       size = 0.6, linetype = 'dashed', color = 'black') +
+          annotate(geom = 'text', x = g$dte1[i] + 86400 * 6, y = g$stP1[i], hjust = 0,
+                   label = paste0('Standard = ', g$std1[i], ' ', g$unit[i]), size = 3.25) + 
+          annotate(geom = 'text', x = g$dte2[i] - 86400 * 6, y = g$stP2[i], hjust = 1,
+                   label = paste0('Standard = ', g$std2[i], ' ', g$unit[i]), size = 3.25) + 
+          theme(legend.position   = c(g$lgd1[i], g$lgd2[i]),
+                legend.direction  = 'horizontal',
+                legend.title      = element_blank(),
+                axis.text.x       = element_text(size = 11),
+                axis.text.y       = element_text(size = 11),
+                axis.title.y      = element_text(size = 12),
+                axis.title.x      = element_blank(),
+                strip.text        = element_text(size = 12))
+    
+    ggsave(filename = paste0(path, '/', g$name[i], '_', year, '.png'),
+           plot = pl, width = 11, height = 8.5, units = 'in', dpi = 300)
+
+  }
+  
+  ts <- data.frame(ts[[1]][, c(1 : 3)], year = year, tmpC = ts[[1]]$valu,
+                   do_c = ts[[2]]$valu, do_s = ts[[3]]$valu)
+  
+  return(ts)
+  
+}
+
+ 

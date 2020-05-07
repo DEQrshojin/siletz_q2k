@@ -1,5 +1,3 @@
-rm(list = ls()); cat('\014')
-
 wDir <- 'C:/siletz_tmdl/03_models/02_q2k'
 
 # __________________________________________________________________________----
@@ -33,3 +31,5 @@ q2kF1 <- file(paste0(wDir, '/slz_q2k_wq.q2k'))
 writeLines(text = q2k1, con = q2kF1)
 
 close(q2kF1)
+
+cat('5. Model Q2K file parameters updated.\n\n')

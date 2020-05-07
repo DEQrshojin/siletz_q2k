@@ -1,5 +1,3 @@
-rm(list = ls()); cat('\014')
-
 suppressMessages(library(lubridate)); suppressMessages(library(dplyr))
 suppressMessages(library(reshape2)); suppressMessages(library(ggplot2))
 suppressMessages(library(tidyr)); suppressMessages(library(scales))
@@ -80,4 +78,6 @@ for (j in 1 : length(cOut)) { # FILL IN NAs
 }
 
 # WRITE BCs TO CSV
-write_bcs_q2k(cOut = cOut, oPth = ctrF$oDir, name = nNme$name) 
+write_bcs_q2k(cOut = cOut, oPth = ctrF$oDir, name = nNme$name)
+
+cat('3. Boundary condition input files created.\n\n')

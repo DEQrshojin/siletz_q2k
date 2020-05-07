@@ -1,29 +1,46 @@
+rm(list = ls()); cat('\014')
+
+suppressMessages(library(lubridate))
+
 source('C:/siletz_tmdl/04_scripts/01_hspf/02_R/fnct_utilities_hspf.R')
 
-nNme <- read_ctrF_H(); nNme <- nNme$name
+source('C:/siletz_tmdl/04_scripts/02_q2k/02_R/q2k_utilities.R')
 
-wDir <- 'C:/siletz_tmdl/03_models/02_q2k/'
+nNme <- read_ctrF_H(); nNme <- nNme$name; year <- read_ctrF_Q()
+
+wDir <- 'C:/siletz_tmdl/03_models/02_q2k'
 
 # Move the output files
-oDir <- 'C:/siletz_tmdl/02_outputs/02_q2k/'
+nDir <- paste0('C:/siletz_tmdl/02_outputs/02_q2k/', nNme)
 
-dir.create(paste0(oDir, nNme))
+if (!file.exists(nDir)) {dir.create(nDir)}
 
-mveF <- c('dynamic_MCa.txt', 'dynamic_MCb.txt', 'dynamic_MCc.txt',
-          'dynamic_MCd.txt', 'slz_q2k_wq.out')
+base <- paste0('dynamic_MC', c('a', 'b', 'c', 'd'))
 
-delF <- c('dynamic_HTS.txt', 'dynamic_STSa.txt', 'dynamic_STSb.txt')
+mvF1 <- paste0(base, '.txt')
+
+mvF2 <- paste0(base, '_', which_year(year$str1), '.txt')
+
+delF <- c('dynamic_HTS.txt', 'dynamic_STSa.txt', 'dynamic_STSb.txt', 'slz_q2k_wq.out')
 
 # Delete files
-file.remove(paste0(wDir, '/', delF))
+invisible(file.remove(paste0(wDir, '/', delF)))
 
 # Move files
-fFil <- paste0(wDir, '/', mveF)
+fFil <- paste0(wDir, '/', mvF1)
 
-tFil <- paste0(oDir, nNme, '/', mveF)
+tFil <- paste0(nDir, '/', mvF2)
 
-file.rename(fFil, tFil)
+invisible(file.rename(fFil, tFil))
 
 # Archive the Q2K files
-file.rename(paste0(wDir, '/slz_q2k_wq.q2k'),
-            paste0(wDir, 'archive/', nNme, '_slz_q2k_wq.q2k'))
+if (!file.exists(paste0(wDir, '/archive/', nNme))) {
+  dir.create(paste0(wDir, '/archive/', nNme))
+}
+
+invisible(
+  file.rename(paste0(wDir, '/slz_q2k_wq.q2k'),
+              paste0(wDir, '/archive/', nNme, '/', which_year(year$str1),
+                     '_slz_q2k_wq.q2k'))
+)
+

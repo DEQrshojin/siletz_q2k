@@ -5,19 +5,10 @@ source('C:/siletz_tmdl/04_scripts/01_hspf/02_R/fnct_utilities_hspf.R')
 # Read in the control file and file name
 ctrF <- read_ctrF_Q(); nNme <- read_ctrF_H()
 
-# Parse the lines from the control file that pertain to met BC inclusion
-metW <- which(names(ctrF) %in% c('airT', 'dwpT', 'cCov', 'wndU'))
-
 # Parse the lines from the control file that pertain to inflow BC inclusion
 bcsW <- which(names(ctrF) %in% c('hspf', 'mntr', 'dvrs', 'stpI'))
 
 tmp1 <- c('@echo off', '')
-
-# Add batch file line if ANY met BC changes are included 
-if(length(which(unlist(ctrF[metW]) == 'TRUE')) != 0) {
-  tmp1 <- append(tmp1, c(paste0('Rscript C:\\siletz_tmdl\\04_scripts\\02_q2k\\',
-                                '02_R\\met_input_q2k.R'), ''))
-}
 
 # Add batch file line if ANY inflow BC changes are included 
 if (length(which(unlist(ctrF[bcsW]) == 'TRUE')) != 0) {
@@ -42,9 +33,15 @@ tmp3 <- c('@echo off', '',
 writeLines(tmp3, 'C:/siletz_tmdl/03_models/02_q2k/tmp3.bat')
 
 # BUILD THE MOVE AND ARCHIVE BATCH FILE ________________________________________
-
-
 tmp4 <- c('@echo off', '',
           'Rscript C:\\siletz_tmdl\\04_scripts\\02_q2k\\02_R\\move_q2k_files.R')
 
 writeLines(tmp4, 'C:/siletz_tmdl/03_models/02_q2k/tmp4.bat')
+
+# BUILD THE PROCESS RESULTS BATCH FILE
+tmp5 <- c('@echo off', '',
+          'Rscript C:\\siletz_tmdl\\04_scripts\\02_q2k\\02_R\\ctrl_results.R')
+
+writeLines(tmp5, 'C:/siletz_tmdl/03_models/02_q2k/tmp5.bat')
+
+cat('2. QUAL2Kw control batch files written.\n\n')

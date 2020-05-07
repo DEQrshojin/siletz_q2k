@@ -10,16 +10,16 @@ modify_q2k_inputs <- function(name = NULL, ctrF = NULL) {
   q2kF <- readLines(paste0(wDir, '/slz_q2k_wq.tpr'))
 
   # ORGANIZE & MODIFY INITIAL CONDITIONS
-  q2kF <- mod_initC(q2k = q2kF, name)
+  q2kF <- mod_initC(q2k = q2kF, name, strD = ctrF$str1)
   
   # ORGANIZE THE MET DATA
-  q2kF <- mod_metBC(q2k = q2kF, name)
+  q2kF <- mod_metBC(q2k = q2kF, name = ctrF$pMet, strD = ctrF$str1)
   
   # ORGANIZE & MODIFY HEADWATER CONDITIONS
-  q2kF <- mod_hwBC(q2k = q2kF, name)
+  q2kF <- mod_hwBC(q2k = q2kF, name, strD = ctrF$str1)
   
   # ORGANIZE & MODIFY TRIBUTARY INFLOW CONDITIONS
-  q2kF <- mod_infBC(q2k = q2kF, name)
+  q2kF <- mod_infBC(q2k = q2kF, name, strD = ctrF$str1)
 
   # WRITE TO Q2K FILE - WHEN MODIFYING PARAMETERS MODIFY THE Q2K FILE
   writeLines(q2kF, paste0(wDir, '/slz_q2k_wq.q2k'))
@@ -28,11 +28,14 @@ modify_q2k_inputs <- function(name = NULL, ctrF = NULL) {
 
 #_______________________________________________________________________________
 # MODIFY Q2K INITIAL CONDITIONS IN MODEL FILE
-mod_initC <- function(q2k = NULL, name = NULL) {
+mod_initC <- function(q2k = NULL, name = NULL, strD = NULL) {
+  
+  # Find the year of the current model
+  year <- which_year(strD)
   
   # Load the initial conditions
-  intC <- read.csv(paste0('C:/siletz_tmdl/01_inputs/02_q2k/bc_intC/', name,
-                          '_intC.csv'), stringsAsFactors = F)
+  intC <- read.csv(paste0('C:/siletz_tmdl/01_inputs/02_q2k/bc_intC/', name, '/',
+                          'intC_', year, '.csv'), stringsAsFactors = F)
 
   bbio <- paste0('x_bbio', addZ(1 : 10), '_____x')
   
@@ -76,22 +79,25 @@ mod_initC <- function(q2k = NULL, name = NULL) {
 
 #_______________________________________________________________________________
 # MODIFY Q2K MET BOUNDARY CONDITIONS IN MODEL FILE
-mod_metBC <- function(q2k = NULL, name = NULL) {
+mod_metBC <- function(q2k = NULL, name = NULL, strD = NULL) {
   
-                                              # Load the met boundary conditions
-  metC <- data.frame(dir = paste0('mt_', c('eShd', 'Ta',   'Td',   'wnd',  'CC')),
+  # Find the year of the current model
+  year <- which_year(strD)
+
+  # Load the met boundary conditions
+  metC <- data.frame(dir = paste0('mt_', c('eShd',   'Ta',   'Td',   'wnd',  'CC')),
                      fil =               c('eShd', 'airT', 'dwpT', 'wndS', 'cCov'),
                      stringsAsFactors = F)
   
   mt <- list()
 
-  pth <- "C:/siletz_tmdl/01_inputs/02_q2k/"
+  pth <- "C:/siletz_tmdl/01_inputs/02_q2k/" 
   
   for (i in 1 : nrow(metC)) {
-    mt[[i]] <- read.csv(paste0(pth, metC$dir[i], '/', name, '_', metC$fil[i],
-                               '.csv'), stringsAsFactors = F)
+    mt[[i]] <- read.csv(paste0(pth, metC$dir[i], '/', name, '/', metC$fil[i], '_',
+                               year, '.csv'), stringsAsFactors = F)
   }
-  
+
   # Clean  up and organize the data
   names(mt) <- metC$fil
   
@@ -155,11 +161,14 @@ mod_metBC <- function(q2k = NULL, name = NULL) {
 
 #_______________________________________________________________________________
 # MODIFY Q2K HEADWATER BOUNDARY CONDITIONS IN MODEL FILE
-mod_hwBC <- function(q2k = NULL, name = NULL) {
+mod_hwBC <- function(q2k = NULL, name = NULL, strD = NULL) {
   
+  # Find the year of the current model
+  year <- which_year(strD)
+
   # Load the met boundary conditions
-  hdwr <- read.csv(paste0('C:/siletz_tmdl/01_inputs/02_q2k/bc_hdwr/', name,
-                          '_hdwr.csv'), stringsAsFactors = F)
+  hdwr <- read.csv(paste0('C:/siletz_tmdl/01_inputs/02_q2k/bc_hdwr/', name, '/',
+                          'hdwr_', year, '.csv'), stringsAsFactors = F)
 
   # Remove rows 19 through 36 (They're for tailwater which I didn't use)
   hdwr <- hdwr[1 : 18, ]; row.names(hdwr) <- hdwr[, 1]; hdwr <- hdwr[, -1]
@@ -198,11 +207,14 @@ mod_hwBC <- function(q2k = NULL, name = NULL) {
 
 #_______________________________________________________________________________
 # MODIFY Q2K TRIB INFLOW BOUNDARY CONDITIONS IN MODEL FILE
-mod_infBC <- function(q2k = NULL, name = NULL) {
+mod_infBC <- function(q2k = NULL, name = NULL, strD = NULL) {
   
+  # Find the year of the current model
+  year <- which_year(strD)
+
   # Load the met boundary conditions
-  infw <- read.csv(paste0('C:/siletz_tmdl/01_inputs/02_q2k/bc_infw/', name,
-                          '_infw.csv'), stringsAsFactors = F)
+  infw <- read.csv(paste0('C:/siletz_tmdl/01_inputs/02_q2k/bc_infw/', name, '/',
+                          'infw_', year, '.csv'), stringsAsFactors = F)
   
   # Replace the dates with time step indeces
   for (i in unique(as.numeric(infw$Reach))) {
@@ -232,50 +244,6 @@ mod_infBC <- function(q2k = NULL, name = NULL) {
   q2k <- append(q2k[1 : (repL - 1)], c(infw, q2k[(repL + 1) : length(q2k)]))
   
   return(q2k)
-
-}
-
-#_______________________________________________________________________________
-# MODIFY Q2K PARAMETERS IN MODEL FILE
-modify_q2k_pars <- function() {
-  
-  wDir <- 'D:/siletz_q2k/08_pest/03_wq'
-  
-  # READ IN DATA AND ORGANIZE
-  # READ IN THE PARAMETER VALUE FILE (.prv) FILE WITH PEST MODIFIED PAR VALUES
-  parV <- readLines(paste0(wDir, '/slz_q2k_wq.prv'))
-  
-  # Remove the first lines of the parameter value file
-  parV <- parV[-which(substr(parV, 1, 2) == "#{3}")]
-  
-  # Parse the parameter values from the parameter name
-  parV <- data.frame(do.call("rbind", strsplit(parV, ",")), stringsAsFactors = F)
-  
-  # Coerce the second column to numbers
-  parV$X2 <- as.numeric(parV$X2)
-  
-  # Change the names of the variables to have the x_parnme_____x
-  parV$X1 <- paste0('x_', tolower(parV$X1), '_____x')
-  
-  # READ IN THE Q2K MODEL FILES FOR MODIFICATION
-  q2k1 <- readLines(paste0(wDir, '/01_cw_cal/slz_q2k_wq_CW.tpr'))
-  q2k2 <- readLines(paste0(wDir, '/02_sp_val/slz_q2k_wq_SP.tpr'))
-  
-  # Find these in the tpr file and replace with the value
-  for (i in 1 : nrow(parV)) {
-    q2k1 <- gsub(parV$X1[i], parV$X2[i], q2k1)
-    q2k2 <- gsub(parV$X1[i], parV$X2[i], q2k2)
-  }
-  
-  # WRITE NEW MODEL FILE
-  q2kF1 <- file(paste0(wDir, '/01_cw_cal/slz_q2k_wq.q2k'))
-  q2kF2 <- file(paste0(wDir, '/02_sp_val/slz_q2k_wq.q2k'))
-  
-  # Write output .q2k file
-  writeLines(text = q2k1, con = q2kF1)
-  writeLines(text = q2k2, con = q2kF2)
-  
-  close(q2kF1); close(q2kF2)
 
 }
 
@@ -404,4 +372,13 @@ copy_inputs <- function(inpt = NULL, scnN = NULL, scnO = NULL) {
   }
 }
 
-
+which_year <- function(strD) {
+  
+  year <- paste0(
+    'YR', addZ(year(as.POSIXct(strD,
+                               '%Y-%m-%d',
+                               tz = 'America/Los_Angeles')) - 2000)
+  )
+  
+  return(year)
+}

@@ -544,8 +544,8 @@ write_bcs_q2k <- function(cOut = NULL, oPth = NULL, name = NULL) {
   
   # Add forward slash to file path if not given
   if (substr(oPth, nchar(oPth), nchar(oPth)) != '/') {oPth <- paste0(oPth, '/')}
-  
-  # calculate nday
+
+  # calculate number of days in simulation
   nday <- as.numeric(cOut[["HW"]]$date[length(cOut[["HW"]]$date)] -
                      cOut[["HW"]]$date[1])
   
@@ -562,10 +562,7 @@ write_bcs_q2k <- function(cOut = NULL, oPth = NULL, name = NULL) {
   inBC <- cOut[[1]]; inBC$Reach <- 0; inBC <- inBC[which(1 == 0), ]
 
   for (i in 2 : (length(cOut) - 2)) {
-  
-    # Make basin names (numbers as leading column of the BC output  
-    # cOut[[i]]$Reach <- as.numeric(gsub('B', '', names(cOut)[i]))
-    
+
     # Make reach names (numbers) as leading column of the BC output
     cOut[[i]]$Reach <- i - 1
     
@@ -578,8 +575,14 @@ write_bcs_q2k <- function(cOut = NULL, oPth = NULL, name = NULL) {
   oFil <- data.frame(pths = c('bc_hdwr', 'bc_infw', 'bc_intC'),
                      fils = c('hdwr',    'infw',    'intC'))
 
+  newD <- paste0(oPth, oFil$pths, '/', name)
+  
+  # Create new folders for scenario inputs
+  for (i in 1 : nrow(oFil)) {if (!file.exists(newD[i])) {dir.create(newD[i])}}
+
   # WRITE TO CSV 
-  oFil <- paste0(oPth, '/', oFil$pths, '/', name, '_', oFil$fils, '.csv')
+  oFil <- paste0(newD, '/', oFil$fils, '_YR',
+                 addZ(year(cOut[[1]]$date[1]) - 2000), '.csv')
 
   # Write Headwater/Tailwater
   write.csv(x = hwtw, file = oFil[1])
@@ -588,8 +591,8 @@ write_bcs_q2k <- function(cOut = NULL, oPth = NULL, name = NULL) {
   write.csv(x = inBC, file = oFil[2], row.names = F)
   
   # Write Initial Conditions
-  write.csv(cOut[['Init']][2 : length(cOut[['Init']])],
-              file = oFil[3], row.names = F)  
+  write.csv(cOut[['Init']][2 : length(cOut[['Init']])], file = oFil[3],
+            row.names = F)  
   
 }
 
