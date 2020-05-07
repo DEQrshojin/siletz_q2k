@@ -1,3 +1,54 @@
+# Summarize DO excursions
+DO_summary <- function(data = NULL) {
+
+  # Reorganize the data
+  cw <- data.frame(data$cw_DO_30DM_C[, c(1, 2, 4, 5)],
+                   data$cw_DO_30DM_S[, c(4, 5)],
+                    data$cw_DO_7DI_C[, c(4, 5)],
+                   data$cw_DO_ABSM_C[, c(4, 5)],
+                     data$cw_T_7DADM[, c(4, 5)])
+  
+  sp <- data.frame(data$sp_DO_7D_C[, c(1, 2, 4, 5)],
+                   data$sp_DO_7D_S[, c(4, 5)],
+                   data$sp_T_7DADM[, c(4, 5)])
+  
+  names(cw)[3 : length(cw)] <- c('30DC_V', '30DC_F', '30DS_V', '30DS_F',
+                                 '7DIC_V', '7DIC_F', 'ABSM_V', 'ABSM_F',
+                                 'T7DADM_V', 'T7DADM_F')
+  
+  names(sp)[3 : length(sp)] <- c('7DC_V', '7DC_F', '7DS_V', '7DS_F',
+                                 'T7DADM_V', 'T7DADM_F')
+  
+  # Identify excursions
+  cw$`30D_X` <- ifelse(cw$`30DC_V` < 8 & cw$`30DS_V` < 90, 1, 0)
+  
+  cw$`7DI_X` <- ifelse(cw$`7DIC_V` < 6.5, 1, 0)
+  
+  cw$`ABSM_X` <- ifelse(cw$`ABSM_V` < 6.0, 1, 0)
+  
+  cw$T7DADM_X <- ifelse(cw$T7DADM_V > 16.0, 1, 0)
+  
+  sp$`7D_X` <- ifelse(sp$`7DC_V` < 11 & sp$`7DS_V` < 95, 1, 0)
+  
+  sp$T7DADM_X <- ifelse(sp$T7DADM_V > 13.0, 1, 0)
+  
+  cwDO <- cw[which(cw$`30D_X` == 1 | cw$`7DI_X` == 1 | cw$`ABSM_X` == 1), ]
+  
+  cw_T <- cw[which(cw$T7DADM_X == 1), ]
+  
+  spDO <- sp[which(sp$`7D_X` == 1), ]
+  
+  sp_T <- sp[which(sp$T7DADM_X == 1), ]
+  
+  data[['excr']] <- list(cw_DO_X = cwDO,
+                         cw_T_X = cw_T,
+                         sp_DO_X = spDO,
+                         sp_T_X = sp_T)
+  
+  return(data)
+  
+}
+
 # Function that serves as wrapper to analyzing DO and temperature data
 DO_analysis <- function(scen = NULL, wudy = NULL, strD = NULL) {
   
@@ -436,24 +487,6 @@ graph_ts <- function(df = NULL, scen = NULL, path = NULL) {
   
 }
 
-addZ <- function(z = NULL, ndgt = 1) {
-  
-  x <- z # Create a duplicate (pristine) vector for the comparisons
-  
-  # CHECK
-  if (max(z) > 10^(ndgt)) {
-    
-    cat('ERROR: Max vector element > number of digits: ', 10^(ndgt)); stop()
-    
-  }
-  
-  # z is vector to add to, ndgt is the number of full string (e.g., 4 = '000X')
-  for (i in 1 : ndgt) {z <- ifelse(x < 10^i, paste0(0, z), z)}
-  
-  return(z)
-  
-}
-
 # Graph all parameter time series; no analysis
 graph_all <- function(mOut = NULL) { # Specify directory where outputs are.
   
@@ -484,4 +517,25 @@ graph_all <- function(mOut = NULL) { # Specify directory where outputs are.
   }
   
 }
+
+# addZ <- function(z = NULL, ndgt = 1) { ----
+#   
+#   x <- z # Create a duplicate (pristine) vector for the comparisons
+#   
+#   # CHECK
+#   if (max(z) > 10^(ndgt)) {
+#     
+#     cat('ERROR: Max vector element > number of digits: ', 10^(ndgt)); stop()
+#     
+#   }
+#   
+#   # z is vector to add to, ndgt is the number of full string (e.g., 4 = '000X')
+#   for (i in 1 : ndgt) {z <- ifelse(x < 10^i, paste0(0, z), z)}
+#   
+#   return(z)
+#   
+# }
+
+
+
  

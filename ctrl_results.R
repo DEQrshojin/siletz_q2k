@@ -1,8 +1,5 @@
-suppressMessages(library(lubridate))
-suppressMessages(library(dplyr))
+suppressMessages(library(lubridate)); suppressMessages(library(dplyr))
 suppressMessages(library(ggplot2))
-
-rm(list = ls()); cat('\014')
 
 source('C:/siletz_tmdl/04_scripts/02_q2k/02_R/cal_functions_q2k.R')
 source('C:/siletz_tmdl/04_scripts/02_q2k/02_R/proc_results.R')
@@ -57,11 +54,8 @@ for (i in 1 : length(year)) {
 
 }
 
-# Print the results out:
-for (k in 1 : length(rslt)) { 
-  
-  write.csv(x = rslt[[k]], file = paste0(pth, '/summary/', names(rslt)[k], '.csv'), 
-            row.names = F)
-  
-}
+# Run DO summary
+rslt <- DO_summary(rslt)
 
+# Save results object the results out:
+saveRDS(object = rslt, file = paste0(pth, '/results_summary.RData'))
