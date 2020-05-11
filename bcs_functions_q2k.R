@@ -8,8 +8,6 @@ hspf_q2k <- function(cOut = NULL, dir = NULL, nme = NULL) {
   # Synopsis
   # Converts HSPF outputs to Qual2Kw inputs. Inputs include:
   # cOut = bc object (list) used to create bcs (by init_bcs()) for qual2kw
-  # strD = start date of input data
-  # endD = end date of input data (ends on hour 0 of the specified day)
   # dir = directory where the HSPF data are
 
   strD <- cOut[['HW']]$date[1]; endD <- cOut[['HW']]$date[nrow(cOut[['HW']])]
@@ -18,11 +16,19 @@ hspf_q2k <- function(cOut = NULL, dir = NULL, nme = NULL) {
 
   # Set the parameter list for HSPF outputs ____________________________________
   par2 = c('Q', 'TKN', 'NH3', 'NOx', 'TP', 'PO4', 'OrC')
+  
+  # MODIFICATION TO INCREASE INFLOW CONCENTRATIONS BY SPECIFIED AMOUNT
+  # THIS HAS BEEN ADDED FOR CRITICAL CONDITION ASSESSMENT. SUBSEQUENT LINES
+  # ASSOCIATED WITH THIS MODIFICATION WILL BE HIGHLIGHTED USING:
+  # **** CRITICAL CONDITION ANALYSIS CODE **** COMMENT OUT WHEN NOT IN USE
+  addC <- read.csv(paste0('C:/siletz_tmdl/05_misc/data/',
+                          'watershed_model_90th_pct_residuals.csv'))
+  # **** CRITICAL CONDITION ANALYSIS CODE **** COMMENT OUT WHEN NOT IN USE
 
   # Create a vector of nutrient destination for initial conditions
-  iCol <- list(from = c(B03 = 4, B06 = 7, B07 = 8, B08 = 9, B11 = 12,
+  iCol <- list(from = c(B03 =  4, B06 =  7, B07 =  8, B08 =  9, B11 = 12,
                         B12 = 13, B13 = 14, B14 = 15, B15 = 16, B16 = 17),
-               to   = c(TKN = 8, NH3 = 9, NOx = 10, TP = 11, PO4 = 12, OrC = 14))
+               to   = c(TKN =  8, NH3 =  9, NOx = 10, TP  = 11, PO4 = 12, OrC = 14))
   
   # Create a list of the basins from which to pull either lateral or reach data
   cBas <- list(HW  = list(L = c(1, 2), R = NULL), # Lat from B1 & B2
@@ -108,7 +114,25 @@ hspf_q2k <- function(cOut = NULL, dir = NULL, nme = NULL) {
         if (m != length(cBas)) { # Convert interim HW/lat loads to concentration
           
           cOut[[m]][, colP[m]] <- cOut[[m]][, colP[m]] / (cOut[[m]][, colQ[m]] * 3.6)
+
+          # **** CRITICAL CONDITION ANALYSIS CODE **** COMMENT OUT WHEN NOT IN USE
+          # **** CRITICAL CONDITION ANALYSIS CODE **** COMMENT OUT WHEN NOT IN USE
+          # **** CRITICAL CONDITION ANALYSIS CODE **** COMMENT OUT WHEN NOT IN USE
+          modC <- addC[which(addC$par == par2[i]), ]
           
+          # Isolate cold-water periods and add concentrations 
+          cndC <- which(month(cOut[[m]]$date) %in% 7 : 8)
+
+          cOut[[m]][cndC, colP[m]] <- cOut[[m]][cndC, colP[m]] + modC$cw
+
+          # Isolate spawning periods and add concentrations
+          cndS <- which(month(cOut[[m]]$date) %in% 9 : 10)
+          
+          cOut[[m]][cndS, colP[m]] <- cOut[[m]][cndS, colP[m]] + modC$sp
+          # **** CRITICAL CONDITION ANALYSIS CODE **** COMMENT OUT WHEN NOT IN USE
+          # **** CRITICAL CONDITION ANALYSIS CODE **** COMMENT OUT WHEN NOT IN USE
+          # **** CRITICAL CONDITION ANALYSIS CODE **** COMMENT OUT WHEN NOT IN USE
+
         } else { # Process for tailwater concentrations as concentrations
           
           cOut[[m]][, colP[m]] <- qlc[['rch']][['conc']][, cBas[[m]][[g]][n] + 1]
