@@ -38,10 +38,4 @@ tmp4 <- c('@echo off', '',
 
 writeLines(tmp4, 'C:/siletz_tmdl/03_models/02_q2k/tmp4.bat')
 
-# BUILD THE PROCESS RESULTS BATCH FILE
-tmp5 <- c('@echo off', '',
-          'Rscript C:\\siletz_tmdl\\04_scripts\\02_q2k\\02_R\\ctrl_results.R')
-
-writeLines(tmp5, 'C:/siletz_tmdl/03_models/02_q2k/tmp5.bat')
-
 cat('2. QUAL2Kw control batch files written.\n\n')

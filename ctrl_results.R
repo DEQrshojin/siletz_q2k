@@ -17,9 +17,7 @@ yr <- paste0("YR", addZ(year - 2000))
 # Create the folders for outputs (if necessary)
 if (!file.exists(pth)) {dir.create(pth)}
 
-if (!file.exists(pth)) {dir.create(paste0(pth, '/summary'))}
-
-if (!file.exists(pth)) {dir.create(paste0(pth, '/figures'))}
+if (!file.exists(paste0(pth, '/figures'))) {dir.create(paste0(pth, '/figures'))}
 
 for (i in 1 : length(year)) {
   

@@ -94,7 +94,11 @@ if (ctrF$eShd == 'TRUE') {
   # Load the shade data
   allD <- readRDS(ctrF$sDir)
   
+  year(strD) <- year(endD) <- 2017
+  
   eShd <- effshd_4_q2k(ES = allD, strD = strD, endD = endD, nday = nday)
+  
+  newD[5] <- 'C:/siletz_tmdl/01_inputs/02_q2k/mt_eShd/S014'
   
   write.csv(x = eShd, paste0(newD[5], '/eShd_', year, '.csv'), row.names = F)
 
