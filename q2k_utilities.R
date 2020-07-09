@@ -356,19 +356,24 @@ copy_inputs <- function(inpt = NULL, scnN = NULL, scnO = NULL) {
                      fils = c('hdwr', 'infw', 'intC', 'cCov', 'eShd', 'airT',
                               'dwpT', 'wndS'),
                      stringsAsFactors = F)
-  
-  typs <- typs[which(typs$inpt %in% inpt), ]
-  
-  dir <- 'C:/siletz_tmdl/01_inputs/02_q2k/'
-  
-  for (i in 1 : nrow(typs)) {
 
-    file.copy(from = c(paste0(dir, typs[i, 2], '/', scnO, '_', typs[i, 3],
-                              c('_cw', '_sp'), '.csv')),
-              to   = c(paste0(dir, typs[i, 2], '/', scnN, '_', typs[i, 3],
-                              c('_cw', '_sp'), '.csv')),
-              overwrite = T)
+  # If the input data sets are a subset of all possible, subset the data frame  
+  if (inpt[1] != 'All' & inpt[1] != 'all') {typs <- typs[which(typs$inpt %in% inpt), ]}
+
+  for (i in 1 : nrow(typs)) {
     
+    frto <- paste0('C:/siletz_tmdl/01_inputs/02_q2k/', typs[i, 2], '/', c(scnO, scnN))
+    
+    fils <- list.files(path = frto[1])
+    
+    fr <- paste0(frto[1], '/', fils)
+    
+    to <- paste0(frto[2], '/', fils)
+    
+    if(!file.exists(frto[2])) {dir.create(frto[2])}
+    
+    file.copy(from = fr, to = to, overwrite = T)
+
   }
 }
 
@@ -381,4 +386,5 @@ which_year <- function(strD) {
   )
   
   return(year)
+  
 }

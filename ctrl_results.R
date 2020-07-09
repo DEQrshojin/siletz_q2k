@@ -10,7 +10,11 @@ scen <- unlist(read_ctrF_H()[1])
 
 pth <- paste0('C:/siletz_tmdl/02_outputs/02_q2k/', scen)
 
-year <- 2004 : 2017
+# SEQUENTIAL YEARS FROM BEGINNING TO END
+# year <- 2004 : 2017
+
+# PROCESS ONLY SPECIFIC YEARS
+year <- c(2006, 2014, 2015)
 
 yr <- paste0("YR", addZ(year - 2000))
 

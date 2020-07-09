@@ -17,11 +17,14 @@ if (!file.exists(nDir)) {dir.create(nDir)}
 
 base <- paste0('dynamic_MC', c('a', 'b', 'c', 'd'))
 
-mvF1 <- paste0(base, '.txt')
+mvF1 <- c(paste0(base, '.txt'), 'slz_q2k_wq.out')
 
-mvF2 <- paste0(base, '_', which_year(year$str1), '.txt')
+mvF2 <- c(paste0(base, '_', which_year(year$str1), '.txt'),
+          paste0('slz_q2k_wq', '_', which_year(year$str1), '.out'))
 
-delF <- c('dynamic_HTS.txt', 'dynamic_STSa.txt', 'dynamic_STSb.txt', 'slz_q2k_wq.out')
+View(mvF1); View(mvF2)
+
+delF <- c('dynamic_HTS.txt', 'dynamic_STSa.txt', 'dynamic_STSb.txt')
 
 # Delete files
 invisible(file.remove(paste0(wDir, '/', delF)))

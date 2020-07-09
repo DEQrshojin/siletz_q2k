@@ -743,16 +743,10 @@ stp_bcs <- function(cOut = NULL, stp = NULL, q2kR = NULL) {
     }
   }
 
-  # if (!is.null(csvOut)) {
-  # 
-  #   if (substr(csvOut, nchar(csvOut), nchar(csvOut)) != '/') {
-  #     csvOut <- paste0(csvOut, '/')
-  #   }
-  #   
-  #   write.csv(wwtp, paste0(csvOut, 'stp_raw.csv'), row.names = F)
-  #   
-  # }
-  
+  # WRITE THE STP INFLOWS TO CHECK
+  # write.csv(file = 'C:/siletz_tmdl/02_outputs/02_q2k/load_cap/stp_loads_YR06.csv',
+  #           x = wwtp, row.names = F)
+
   # Mixing of inflows and STP (mass balance - acting as a combined stream)
   # First the flows
   mxWQ$qIn_cms <- wwtp$qIn_cms + rivr$qIn_cms
@@ -761,7 +755,7 @@ stp_bcs <- function(cOut = NULL, stp = NULL, q2kR = NULL) {
     
     mxWQ[, i] <- (wwtp$qIn_cms * wwtp[, i] + rivr$qIn_cms * rivr[, i]) /
                   mxWQ$qIn_cms
-    
+
   }
   
   # Add Q2K reach diversion back in (cause we deleted them up above)

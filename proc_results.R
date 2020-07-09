@@ -415,6 +415,10 @@ graph_ts <- function(df = NULL, scen = NULL, path = NULL) {
   # Detect the year for saving the files
   year <- paste0("YR", addZ(year(df$dte[1]) - 2000))
   
+  # Create copy of dates for later
+  df$dte2 <- df$dte
+  
+  # Change date year to 2017 for graphing
   year(df$dte) <- 2017
 
   # Rename reach col for graphing
@@ -426,12 +430,14 @@ graph_ts <- function(df = NULL, scen = NULL, path = NULL) {
                      lblG = c('Daily minimum', 'Daily mean', 'Daily maximum'),
                      stringsAsFactors = F)
   
+  # Iterate through each parameter (temp, DO conc, and DO sat)
   ts <- list()
 
+  # Reshape and change stat name for graphing
   for (i in 1 : 3) {
 
-    ts[[i]] <- reshape2::melt(df[, c(1, 2, (i * 3) + (0 : 2))],
-                              id.vars = c('Reach', 'dte'),
+    ts[[i]] <- reshape2::melt(df[, c(1, 2, 15, (i * 3) + (0 : 2))],
+                              id.vars = c('Reach', 'dte', 'dte2'),
                               value.name = 'valu',
                               variable.name = 'stat')
     
@@ -442,30 +448,30 @@ graph_ts <- function(df = NULL, scen = NULL, path = NULL) {
   # Read in result specs (pars, criteria, stat base, and graphing)
   g <- read.csv('C:/siletz_tmdl/02_outputs/02_q2k/graph_specs_ts.csv',
                 stringsAsFactors = F)
-  
+
   # Convert dates to POSIXc
   for (x in 3 : 5) {
     g[, x] <- as.POSIXct(g[, x], '%m/%d/%Y', tz = 'America/Los_Angeles')
   }
-  
+
   for (i in 1 : 3) {
 
     pl <- ggplot(data = ts[[i]], aes(x = dte, y = valu, color = stat)) +
           theme_classic () + geom_line(size = 0.7) + ylab(g$ylab[i]) +
-          scale_y_continuous(limits = c(g$ymin[i], g$ymax[i])) +    
+          scale_y_continuous(limits = c(g$ymin[i], g$ymax[i])) +
           scale_x_datetime(limits = c(g$dte1[i], g$dte2[i])) +
           facet_wrap(.~ Reach, ncol = 2, labeller = label_both) +
           scale_color_manual(values = c('darkgray', 'black', 'darkgray')) +
           geom_segment(aes(x = g$dte1[i], y = g$std1[i],
                            xend = g$dteC[i], yend = g$std1[i]),
-                       size = 0.6, linetype = 'dashed', color = 'black') + 
+                       size = 0.6, linetype = 'dashed', color = 'black') +
           geom_segment(aes(x = g$dteC[i], y = g$std2[i],
                            xend = g$dte2[i], yend = g$std2[i]),
                        size = 0.6, linetype = 'dashed', color = 'black') +
           annotate(geom = 'text', x = g$dte1[i] + 86400 * 6, y = g$stP1[i], hjust = 0,
-                   label = paste0('Standard = ', g$std1[i], ' ', g$unit[i]), size = 3.25) + 
+                   label = paste0('Standard = ', g$std1[i], ' ', g$unit[i]), size = 3.25) +
           annotate(geom = 'text', x = g$dte2[i] - 86400 * 6, y = g$stP2[i], hjust = 1,
-                   label = paste0('Standard = ', g$std2[i], ' ', g$unit[i]), size = 3.25) + 
+                   label = paste0('Standard = ', g$std2[i], ' ', g$unit[i]), size = 3.25) +
           theme(legend.position   = c(g$lgd1[i], g$lgd2[i]),
                 legend.direction  = 'horizontal',
                 legend.title      = element_blank(),
@@ -474,14 +480,16 @@ graph_ts <- function(df = NULL, scen = NULL, path = NULL) {
                 axis.title.y      = element_text(size = 12),
                 axis.title.x      = element_blank(),
                 strip.text        = element_text(size = 12))
-    
+
     ggsave(filename = paste0(path, '/', g$name[i], '_', year, '.png'),
            plot = pl, width = 11, height = 8.5, units = 'in', dpi = 300)
 
   }
-  
-  ts <- data.frame(ts[[1]][, c(1 : 3)], year = year, tmpC = ts[[1]]$valu,
+
+  ts <- data.frame(ts[[1]][, c(1, 3, 4)], year = year, tmpC = ts[[1]]$valu,
                    do_c = ts[[2]]$valu, do_s = ts[[3]]$valu)
+  
+  names(ts)[2] <- 'dte'
   
   return(ts)
   
@@ -518,24 +526,12 @@ graph_all <- function(mOut = NULL) { # Specify directory where outputs are.
   
 }
 
-# addZ <- function(z = NULL, ndgt = 1) { ----
-#   
-#   x <- z # Create a duplicate (pristine) vector for the comparisons
-#   
-#   # CHECK
-#   if (max(z) > 10^(ndgt)) {
-#     
-#     cat('ERROR: Max vector element > number of digits: ', 10^(ndgt)); stop()
-#     
-#   }
-#   
-#   # z is vector to add to, ndgt is the number of full string (e.g., 4 = '000X')
-#   for (i in 1 : ndgt) {z <- ifelse(x < 10^i, paste0(0, z), z)}
-#   
-#   return(z)
-#   
-# }
-
-
-
- 
+addZ <- function(v) {
+  
+  # Function to add a leading 0 to a vector of #s if a number is less than 10
+  # This is for vectors of minutes, hours, days, and months where there are only
+  # one or two digits
+  
+  ifelse(v < 10, paste0(0, v), as.character(v))
+  
+}
